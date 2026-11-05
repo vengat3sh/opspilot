@@ -290,7 +290,33 @@ html, body, #root {
   border-radius: 4px 18px 18px 18px;
   padding: 12px 18px;
   font-size: 13.5px; color: #dc2626; font-weight: 500;
+  white-space: pre-wrap; line-height: 1.6;
 }
+
+.bubble-warning {
+  background: #fffbeb;
+  border: 1.5px solid #fde68a;
+  border-radius: 4px 18px 18px 18px;
+  padding: 16px 20px;
+  box-shadow: 0 4px 16px rgba(245,158,11,.1);
+}
+.warning-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: #fef3c7; color: #92400e; font-size: 11px;
+  font-weight: 700; padding: 4px 10px; border-radius: 20px;
+  margin-bottom: 10px; letter-spacing: .03em;
+}
+.warning-text {
+  font-size: 13.5px; color: #78350f; line-height: 1.65;
+  white-space: pre-wrap; font-weight: 450;
+}
+.warning-action {
+  margin-top: 12px; display: inline-flex; align-items: center; gap: 6px;
+  background: #f59e0b; color: #fff; border: none; border-radius: 8px;
+  padding: 7px 14px; font-size: 12px; font-weight: 700; cursor: pointer;
+  transition: background .15s;
+}
+.warning-action:hover { background: #d97706; }
 
 .bubble-meta {
   margin-top: 10px; padding-top: 8px;

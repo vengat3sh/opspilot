@@ -368,7 +368,21 @@ export default function App() {
                           <div className="typing-dot" />
                         </div>
                       ) : t.error ? (
-                        <div className="bubble-err">⚠️ {t.content}</div>
+                        t.content.includes("FREE TOKEN LIMIT") || t.content.includes("SAFETY") ? (
+                          <div className="bubble-warning">
+                            <div className="warning-badge">🛡️ Zero-Cost Protection Active</div>
+                            <div className="warning-text">{t.content}</div>
+                            <button
+                              type="button"
+                              className="warning-action"
+                              onClick={() => setProvider("ollama")}
+                            >
+                              🖥️ Switch to Unlimited Local Ollama
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="bubble-err">⚠️ {t.content}</div>
+                        )
                       ) : (
                         <div className="bubble-bot">
                           <AssistantContent content={t.content} streaming={t.streaming} />

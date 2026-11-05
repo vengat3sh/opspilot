@@ -79,43 +79,87 @@ async def _ollama_chat(settings: Settings, messages: list[ChatMessage]) -> LLMRe
     )
 
 
+# Backup free models for zero-cost auto-fallback if primary is rate-limited
+FREE_MODEL_FALLBACKS = [
+    "nvidia/nemotron-3.5-lightning:free",
+    "liquid/lfm-2.5-2.6b:free",
+    "xingchen-agi/xing4.0-29b-a4b:free",
+]
+
+
+def _format_quota_error(detail: str = "") -> str:
+    return (
+        "⚠️ FREE TOKEN LIMIT REACHED / RATE-LIMITED\n\n"
+        "🛡️ Zero-Charge Safety Guard: The cloud provider's free tier has temporarily reached its token or request limit. "
+        "OpsPilot has automatically cut off the connection to ensure you are NEVER charged.\n\n"
+        "🕒 When it resets:\n"
+        "• Minute limits refresh in ~60 seconds.\n"
+        "• Daily quotas reset at 00:00 UTC.\n\n"
+        "💡 You can retry in 1 minute, or switch to 'Local (Ollama)' in the sidebar for unlimited local queries."
+    )
+
+
 async def _cloud_chat(settings: Settings, messages: list[ChatMessage]) -> LLMResult:
     api_key = settings.cloud_api_key.get_secret_value()
     if not api_key:
         raise LLMError("Cloud provider is not configured (CLOUD_API_KEY is empty).")
-    payload = {
-        "model": settings.cloud_model,
-        "messages": _inject_system(settings, messages),
-    }
-    url = f"{settings.cloud_base_url.rstrip('/')}/chat/completions"
-    start = time.perf_counter()
-    try:
-        async with httpx.AsyncClient(timeout=settings.llm_timeout_seconds) as client:
-            resp = await client.post(
-                url, json=payload, headers={"Authorization": f"Bearer {api_key}"}
-            )
-            resp.raise_for_status()
-            data = resp.json()
-    except httpx.HTTPStatusError as exc:
-        # Never echo request headers; only a short slice of the response body.
-        raise LLMError(f"Cloud API error {exc.response.status_code}") from exc
-    except httpx.HTTPError as exc:
-        raise LLMError(f"Cloud request failed: {type(exc).__name__}") from exc
 
-    latency = int((time.perf_counter() - start) * 1000)
-    usage = data.get("usage") or {}
-    try:
-        text = data["choices"][0]["message"]["content"] or ""
-    except (KeyError, IndexError, TypeError) as exc:
-        raise LLMError("Unexpected cloud API response format.") from exc
-    return LLMResult(
-        text=strip_thinking(text),
-        provider="cloud",
-        model=settings.cloud_model,
-        latency_ms=latency,
-        prompt_tokens=usage.get("prompt_tokens"),
-        completion_tokens=usage.get("completion_tokens"),
-    )
+    # Safety Guard: Ensure OpenRouter calls only use free models
+    if "openrouter" in settings.cloud_base_url.lower() and not settings.cloud_model.endswith(":free"):
+        raise LLMError("🛑 SAFETY CUTOFF: Only free-tier models (:free) are permitted to prevent accidental charges.")
+
+    models_to_try = [settings.cloud_model]
+    if settings.cloud_model in FREE_MODEL_FALLBACKS:
+        for fb in FREE_MODEL_FALLBACKS:
+            if fb not in models_to_try:
+                models_to_try.append(fb)
+
+    last_error: Exception | None = None
+    for model_name in models_to_try:
+        payload = {
+            "model": model_name,
+            "messages": _inject_system(settings, messages),
+        }
+        url = f"{settings.cloud_base_url.rstrip('/')}/chat/completions"
+        start = time.perf_counter()
+        try:
+            async with httpx.AsyncClient(timeout=settings.llm_timeout_seconds) as client:
+                resp = await client.post(
+                    url, json=payload, headers={"Authorization": f"Bearer {api_key}"}
+                )
+                if resp.status_code == 429:
+                    logger.warning("Model %s rate-limited (429), trying fallback...", model_name)
+                    last_error = LLMError(_format_quota_error())
+                    continue
+                if resp.status_code == 402:
+                    raise LLMError("🛑 PAYMENT REQUIRED BLOCKED: Model is payable. Request aborted to protect your wallet.")
+                resp.raise_for_status()
+                data = resp.json()
+
+            latency = int((time.perf_counter() - start) * 1000)
+            usage = data.get("usage") or {}
+            text = data["choices"][0]["message"]["content"] or ""
+            return LLMResult(
+                text=strip_thinking(text),
+                provider="cloud",
+                model=model_name,
+                latency_ms=latency,
+                prompt_tokens=usage.get("prompt_tokens"),
+                completion_tokens=usage.get("completion_tokens"),
+            )
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 429:
+                last_error = LLMError(_format_quota_error())
+                continue
+            if exc.response.status_code == 402:
+                raise LLMError("🛑 PAYMENT REQUIRED BLOCKED: Request aborted to protect your wallet.") from exc
+            raise LLMError(f"Cloud API error {exc.response.status_code}") from exc
+        except httpx.HTTPError as exc:
+            raise LLMError(f"Cloud request failed: {type(exc).__name__}") from exc
+
+    if last_error:
+        raise last_error
+    raise LLMError("Cloud request failed.")
 
 
 async def chat(settings: Settings, messages: list[ChatMessage], provider: str | None) -> LLMResult:
@@ -193,50 +237,85 @@ async def stream_ollama(settings: Settings, messages: list[ChatMessage]) -> Asyn
 
 
 async def stream_cloud(settings: Settings, messages: list[ChatMessage]) -> AsyncIterator[str]:
-    """Yield text tokens from an OpenAI-compatible streaming API."""
+    """Yield text tokens from an OpenAI-compatible streaming API with zero-cost protection."""
     api_key = settings.cloud_api_key.get_secret_value()
     if not api_key:
         raise LLMError("Cloud provider is not configured (CLOUD_API_KEY is empty).")
-    payload = {
-        "model": settings.cloud_model,
-        "messages": _inject_system(settings, messages),
-        "stream": True,
-    }
-    url = f"{settings.cloud_base_url.rstrip('/')}/chat/completions"
-    start = time.perf_counter()
-    try:
-        async with httpx.AsyncClient(timeout=settings.llm_timeout_seconds) as client:
-            async with client.stream(
-                "POST", url, json=payload,
-                headers={"Authorization": f"Bearer {api_key}"}
-            ) as resp:
-                resp.raise_for_status()
-                async for line in resp.aiter_lines():
-                    if not line.startswith("data:"):
+
+    # Safety Guard: Ensure OpenRouter calls only use free models
+    if "openrouter" in settings.cloud_base_url.lower() and not settings.cloud_model.endswith(":free"):
+        raise LLMError("🛑 SAFETY CUTOFF: Only free-tier models (:free) are permitted to prevent accidental charges.")
+
+    models_to_try = [settings.cloud_model]
+    if settings.cloud_model in FREE_MODEL_FALLBACKS:
+        for fb in FREE_MODEL_FALLBACKS:
+            if fb not in models_to_try:
+                models_to_try.append(fb)
+
+    last_error: Exception | None = None
+    for model_name in models_to_try:
+        payload = {
+            "model": model_name,
+            "messages": _inject_system(settings, messages),
+            "stream": True,
+        }
+        url = f"{settings.cloud_base_url.rstrip('/')}/chat/completions"
+        start = time.perf_counter()
+        streamed_any = False
+        try:
+            async with httpx.AsyncClient(timeout=settings.llm_timeout_seconds) as client:
+                async with client.stream(
+                    "POST", url, json=payload,
+                    headers={"Authorization": f"Bearer {api_key}"}
+                ) as resp:
+                    if resp.status_code == 429:
+                        logger.warning("Stream model %s rate-limited (429), trying fallback...", model_name)
+                        last_error = LLMError(_format_quota_error())
                         continue
-                    data_str = line[5:].strip()
-                    if data_str == "[DONE]":
-                        break
-                    try:
-                        chunk = json.loads(data_str)
-                    except json.JSONDecodeError:
-                        continue
-                    token = chunk.get("choices", [{}])[0].get("delta", {}).get("content") or ""
-                    if token:
-                        yield token
-        latency = int((time.perf_counter() - start) * 1000)
-        yield json.dumps({
-            "__done__": True,
-            "provider": "cloud",
-            "model": settings.cloud_model,
-            "latency_ms": latency,
-            "prompt_tokens": None,
-            "completion_tokens": None,
-        })
-    except httpx.HTTPStatusError as exc:
-        raise LLMError(f"Cloud API error {exc.response.status_code}") from exc
-    except httpx.HTTPError as exc:
-        raise LLMError(f"Cloud request failed: {type(exc).__name__}") from exc
+                    if resp.status_code == 402:
+                        raise LLMError("🛑 PAYMENT REQUIRED BLOCKED: Request aborted to protect your wallet.")
+                    resp.raise_for_status()
+
+                    async for line in resp.aiter_lines():
+                        if not line.startswith("data:"):
+                            continue
+                        data_str = line[5:].strip()
+                        if data_str == "[DONE]":
+                            break
+                        try:
+                            chunk = json.loads(data_str)
+                        except json.JSONDecodeError:
+                            continue
+                        token = chunk.get("choices", [{}])[0].get("delta", {}).get("content") or ""
+                        if token:
+                            streamed_any = True
+                            yield token
+
+            latency = int((time.perf_counter() - start) * 1000)
+            yield json.dumps({
+                "__done__": True,
+                "provider": "cloud",
+                "model": model_name,
+                "latency_ms": latency,
+                "prompt_tokens": None,
+                "completion_tokens": None,
+            })
+            return
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 429 and not streamed_any:
+                last_error = LLMError(_format_quota_error())
+                continue
+            if exc.response.status_code == 402:
+                raise LLMError("🛑 PAYMENT REQUIRED BLOCKED: Request aborted to protect your wallet.") from exc
+            raise LLMError(f"Cloud API error {exc.response.status_code}") from exc
+        except httpx.HTTPError as exc:
+            if not streamed_any and model_name != models_to_try[-1]:
+                continue
+            raise LLMError(f"Cloud request failed: {type(exc).__name__}") from exc
+
+    if last_error:
+        raise last_error
+    raise LLMError("All free cloud model endpoints are currently busy. Please retry shortly.")
 
 
 async def stream_chat(
