@@ -12,8 +12,8 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "qwen3:1.7b"
 
-    cloud_base_url: str = "https://api.openai.com/v1"
-    cloud_model: str = "gpt-4o-mini"
+    cloud_base_url: str = "https://openrouter.ai/api/v1"
+    cloud_model: str = "nvidia/nemotron-3.5-lightning:free"
     cloud_api_key: SecretStr = SecretStr("")
 
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"

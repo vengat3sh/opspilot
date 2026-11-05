@@ -79,9 +79,10 @@ async def _ollama_chat(settings: Settings, messages: list[ChatMessage]) -> LLMRe
     )
 
 
-# Backup free models for zero-cost auto-fallback if primary is rate-limited
+# High-performance zero-cost models with verified $0.00 pricing on OpenRouter
 FREE_MODEL_FALLBACKS = [
     "nvidia/nemotron-3.5-lightning:free",
+    "cohere/north-mini-code:free",
     "liquid/lfm-2.5-2.6b:free",
     "xingchen-agi/xing4.0-29b-a4b:free",
 ]
