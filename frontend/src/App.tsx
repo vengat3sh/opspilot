@@ -17,87 +17,45 @@ interface Turn {
   streaming?: boolean;
 }
 
-// ── SVG icons ───────────────────────────────────────────────────────────────
+// ── Icons ───────────────────────────────────────────────────────────────────
 const I = {
   send: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="22" y1="2" x2="11" y2="13" />
+      <polygon points="22 2 15 22 11 13 2 9 22 2" />
     </svg>
   ),
   bot: (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7H3a7 7 0 0 1 7-7h1V5.73A2 2 0 0 1 10 4a2 2 0 0 1 2-2z"/>
-      <path d="M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/>
-      <circle cx="9" cy="17" r="1" fill="currentColor" stroke="none"/>
-      <circle cx="15" cy="17" r="1" fill="currentColor" stroke="none"/>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="11" width="18" height="10" rx="2" />
+      <circle cx="8.5" cy="16" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="15.5" cy="16" r="1.5" fill="currentColor" stroke="none" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+      <line x1="12" y1="2" x2="12" y2="4" />
     </svg>
   ),
   user: (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-    </svg>
-  ),
-  trash: (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
-      <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
-    </svg>
-  ),
-  plus: (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-    </svg>
-  ),
-  cpu: (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="4" y="4" width="16" height="16" rx="2"/>
-      <rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/>
-      <line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/>
-      <line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/>
-      <line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/>
-      <line x1="1" y1="14" x2="4" y2="14"/>
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
     </svg>
   ),
   menu: (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/>
+      <line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="18" x2="21" y2="18" />
+    </svg>
+  ),
+  plus: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+  ),
+  trash: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6" /><path d="M14 11v6" />
     </svg>
   ),
 };
-
-// ── Markdown renderer ────────────────────────────────────────────────────────
-function AssistantContent({ content, streaming }: { content: string; streaming?: boolean }) {
-  return (
-    <div className="md">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          code({ inline, className, children, ...props }: any) {
-            const lang = /language-(\w+)/.exec(className || "")?.[1];
-            return !inline && lang ? (
-              <SyntaxHighlighter
-                style={oneDark} language={lang} PreTag="div"
-                customStyle={{ borderRadius: 12, fontSize: "0.76rem", margin: "0.6rem 0", border: "1px solid rgba(255,255,255,.06)" }}
-                {...props}
-              >
-                {String(children).replace(/\n$/, "")}
-              </SyntaxHighlighter>
-            ) : (
-              <code {...props}>{children}</code>
-            );
-          },
-          a({ href, children }) {
-            return <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
-          },
-        }}
-      >
-        {content}
-      </ReactMarkdown>
-      {streaming && <span className="cursor" />}
-    </div>
-  );
-}
 
 // ── Quick Topics ─────────────────────────────────────────────────────────────
 const QUICK_TOPICS = [
@@ -108,21 +66,20 @@ const QUICK_TOPICS = [
   { icon: "🛡️", label: "Linux Hardening", prompt: "Give me the top 7 essential security hardening checklist steps for a production Ubuntu/Debian server." },
 ];
 
-// ── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
-  const [turns, setTurns]           = useState<Turn[]>([]);
-  const [input, setInput]           = useState("");
-  const [provider, setProvider]     = useState<Provider>("cloud");
+  const [turns, setTurns]             = useState<Turn[]>([]);
+  const [input, setInput]             = useState("");
+  const [provider, setProvider]       = useState<Provider>("cloud");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const isPendingRef                = useRef(false);
+  const isPendingRef                  = useRef(false);
   const [isPendingUI, setIsPendingUI] = useState(false);
-  const bottomRef                   = useRef<HTMLDivElement>(null);
-  const abortRef                    = useRef<AbortController | null>(null);
-  const textareaRef                 = useRef<HTMLTextAreaElement>(null);
+  const bottomRef                     = useRef<HTMLDivElement>(null);
+  const abortRef                      = useRef<AbortController | null>(null);
+  const textareaRef                   = useRef<HTMLTextAreaElement>(null);
 
   const status = useQuery({ queryKey: ["llm-status"], queryFn: getLLMStatus, refetchInterval: 15_000 });
 
-  // Automatically select the best active provider
+  // Auto-switch to cloud provider in production/render
   useEffect(() => {
     if (status.data) {
       if (!status.data.ollama_reachable && status.data.cloud_configured) {
@@ -137,16 +94,26 @@ export default function App() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [turns]);
 
+  // Dynamic textarea height
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, 180) + "px";
+    el.style.height = Math.min(el.scrollHeight, 140) + "px";
   }, [input]);
 
-  function setPending(v: boolean) { isPendingRef.current = v; setIsPendingUI(v); }
+  function setPending(v: boolean) {
+    isPendingRef.current = v;
+    setIsPendingUI(v);
+  }
 
-  function clearChat() { abortRef.current?.abort(); setTurns([]); setInput(""); setPending(false); }
+  function clearChat() {
+    abortRef.current?.abort();
+    setTurns([]);
+    setInput("");
+    setPending(false);
+    setSidebarOpen(false);
+  }
 
   function sendMessage(text: string) {
     if (!text.trim() || isPendingRef.current) return;
@@ -157,14 +124,18 @@ export default function App() {
       { role: "user" as const, content: text.trim() },
     ];
 
-    setTurns(prev => [...prev,
+    setTurns(prev => [
+      ...prev,
       { role: "user", content: text.trim() },
       { role: "assistant", content: "", streaming: true },
     ]);
     setInput("");
     setPending(true);
+    setSidebarOpen(false);
 
-    abortRef.current = streamChat(messages, provider,
+    abortRef.current = streamChat(
+      messages,
+      provider,
       token => setTurns(prev => {
         const c = [...prev], l = c[c.length - 1];
         if (l?.streaming) c[c.length - 1] = { ...l, content: l.content + token };
@@ -189,271 +160,222 @@ export default function App() {
     );
   }
 
-  const apiOk   = !!status.data;
-  const modelOk = !!status.data?.ollama_model_ready;
-  const msgCount = Math.ceil(turns.filter(t => t.role === "user").length);
-  const isActive = isPendingUI || input.trim().length > 0;
+  const isCloudOnline = status.data?.cloud_configured;
+  const isOllamaOnline = status.data?.ollama_reachable;
 
   return (
-    <>
-      <div className="app-bg" />
-      <div className="shell">
+    <div className="app-container">
+      {/* ── Mobile Backdrop Overlay ── */}
+      <div
+        className={`mobile-overlay ${sidebarOpen ? "open" : ""}`}
+        onClick={() => setSidebarOpen(false)}
+      />
 
-        {/* ── SIDEBAR OVERLAY FOR MOBILE ───────────── */}
-        <div
-          className={`sidebar-overlay ${sidebarOpen ? "open" : ""}`}
-          onClick={() => setSidebarOpen(false)}
-        />
-
-        {/* ── SIDEBAR ─────────────────────────────────────── */}
-        <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
-          {/* Logo */}
-          <div className="sidebar-logo">
-            <div className="logo-mark">🚀</div>
+      {/* ── App Sidebar ── */}
+      <aside className={`app-sidebar ${sidebarOpen ? "open" : ""}`}>
+        <div className="sidebar-header">
+          <div className="brand-badge">
+            <div className="brand-icon">⚡</div>
             <div>
-              <div className="logo-text">OpsPilot</div>
-              <div className="logo-sub">AI Operations · Phase 1</div>
+              <div className="brand-name">OpsPilot</div>
+              <span className="brand-tag">24/7 Cloud AI</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="sidebar-content">
+          <button className="new-chat-btn" onClick={clearChat} type="button">
+            {I.plus} New Conversation
+          </button>
+
+          {/* System Status Card */}
+          <div className="section-label">Engine Telemetry</div>
+          <div className="status-card">
+            <div className="status-row">
+              <span style={{ color: "#64748b" }}>Cloud Engine</span>
+              <div className="status-indicator">
+                <span className={`dot ${isCloudOnline ? "green" : "amber"}`} />
+                <span style={{ fontWeight: 600, color: isCloudOnline ? "#059669" : "#b45309" }}>
+                  {isCloudOnline ? "Active" : "Ready"}
+                </span>
+              </div>
+            </div>
+            <div className="status-row" style={{ marginTop: 4 }}>
+              <span style={{ color: "#64748b" }}>Local Ollama</span>
+              <div className="status-indicator">
+                <span className={`dot ${isOllamaOnline ? "green" : "amber"}`} />
+                <span style={{ fontWeight: 600, color: isOllamaOnline ? "#059669" : "#64748b" }}>
+                  {isOllamaOnline ? "Connected" : "Offline"}
+                </span>
+              </div>
+            </div>
+            <div className="status-row" style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid #f1f5f9" }}>
+              <span style={{ color: "#94a3b8", fontSize: 11 }}>Zero-Cost Guard</span>
+              <span style={{ color: "#6366f1", fontWeight: 700, fontSize: 11 }}>100% Free Tier</span>
             </div>
           </div>
 
-          <div className="sidebar-body">
-            {/* New chat */}
-            <button className="btn-new" onClick={clearChat}>
-              {I.plus} New Conversation
+          {/* Quick Topics */}
+          <div className="section-label">Quick Scenarios</div>
+          {QUICK_TOPICS.map(item => (
+            <button
+              key={item.label}
+              className="quick-prompt"
+              onClick={() => sendMessage(item.prompt)}
+              type="button"
+            >
+              <span className="quick-icon">{item.icon}</span>
+              <span>{item.label}</span>
             </button>
+          ))}
+        </div>
 
-            {/* Status */}
-            <div className="sidebar-section-label">System Status</div>
-            {[
-              { label: "API Server",    ok: apiOk },
-              { label: "Ollama Model",  ok: modelOk },
-            ].map(({ label, ok }) => (
-              <div className="status-row" key={label}>
-                <span className={`status-dot ${ok ? "on" : "off"}`} />
-                <span className="status-label">{label}</span>
-                <span className={`status-val ${ok ? "on" : "off"}`}>{ok ? "Online" : "Offline"}</span>
+        <div style={{ padding: "12px 18px", borderTop: "1px solid var(--border)", fontSize: 11, color: "#94a3b8" }}>
+          OpsPilot v0.1.0 • Enterprise Cloud
+        </div>
+      </aside>
+
+      {/* ── Main Chat Area ── */}
+      <main className="app-main">
+        {/* Navigation Topbar */}
+        <header className="chat-navbar">
+          <div className="navbar-left">
+            <button
+              className="nav-toggle-btn"
+              onClick={() => setSidebarOpen(prev => !prev)}
+              type="button"
+              title="Open Navigation"
+            >
+              {I.menu}
+            </button>
+            <span className="nav-title">OpsPilot AI</span>
+            <span className="nav-pill">
+              <span className="dot green" /> 24/7 Cloud
+            </span>
+          </div>
+
+          {turns.length > 0 && (
+            <button className="clear-btn" onClick={clearChat} type="button" title="Clear Chat">
+              {I.trash} Clear
+            </button>
+          )}
+        </header>
+
+        {/* Message Stream */}
+        <div className="chat-scroll">
+          <div className="chat-center">
+            {turns.length === 0 ? (
+              <div className="empty-hero">
+                <div className="hero-avatar">🚀</div>
+                <h1 className="hero-title">How can I assist you today?</h1>
+                <p className="hero-subtitle">
+                  Ask anything about DevOps, Docker, Kubernetes, CI/CD, Python, or system troubleshooting.
+                </p>
+                <div className="hero-chips">
+                  {QUICK_TOPICS.map(item => (
+                    <button
+                      key={item.label}
+                      className="hero-chip"
+                      onClick={() => sendMessage(item.prompt)}
+                      type="button"
+                    >
+                      <span style={{ marginRight: 6 }}>{item.icon}</span>
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-            ))}
+            ) : (
+              turns.map((t, idx) => (
+                <div key={idx} className={`turn-row ${t.role === "user" ? "user" : "bot"}`}>
+                  <div className={`turn-avatar ${t.role === "user" ? "user" : "bot"}`}>
+                    {t.role === "user" ? I.user : I.bot}
+                  </div>
 
-            {/* Quick Topics */}
-            <div className="sidebar-section-label" style={{ marginTop: 18 }}>Quick Topics</div>
-            {QUICK_TOPICS.map(item => (
-              <button
-                key={item.label}
-                className="topic-btn"
-                onClick={() => { sendMessage(item.prompt); setSidebarOpen(false); }}
-                title={item.prompt}
-              >
-                <span className="topic-icon">{item.icon}</span>
-                <span>{item.label}</span>
-              </button>
-            ))}
-
-            {/* Provider Segmented Tabs */}
-            <div className="sidebar-section-label" style={{ marginTop: 18 }}>Inference Engine</div>
-            <div className="provider-tabs">
-              <button
-                type="button"
-                className={`provider-tab ${provider === "ollama" ? "active" : ""}`}
-                onClick={() => setProvider("ollama")}
-              >
-                🖥️ Local Ollama
-              </button>
-              <button
-                type="button"
-                className={`provider-tab ${provider === "cloud" ? "active" : ""}`}
-                onClick={() => setProvider("cloud")}
-                disabled={status.data ? !status.data.cloud_configured : false}
-                title={status.data?.cloud_configured ? "Cloud API ready" : "Set CLOUD_API_KEY in backend/.env"}
-              >
-                ☁️ Cloud API
-              </button>
-            </div>
-
-            {/* Models */}
-            {!!status.data?.ollama_models?.length && (
-              <>
-                <div className="sidebar-section-label" style={{ marginTop: 18 }}>Loaded Models</div>
-                {status.data.ollama_models.map((m, i) => (
-                  <div className={`model-chip ${i === 0 ? "active" : ""}`} key={m}>
-                    <div className="model-chip-dot" style={{ background: i === 0 ? "var(--brand)" : "#d1d5db" }} />
-                    <span className="model-chip-name">{m}</span>
-                    {i === 0 && (
-                      <span style={{ marginLeft: "auto", fontSize: 9, fontWeight: 700, color: "var(--brand)", letterSpacing: ".05em" }}>
-                        READY
-                      </span>
+                  <div className="turn-bubble">
+                    {t.role === "user" ? (
+                      <div className="bubble-user">{t.content}</div>
+                    ) : t.error ? (
+                      <div className="bubble-assistant" style={{ borderColor: "#fecaca", background: "#fef2f2" }}>
+                        <span style={{ color: "#dc2626", fontWeight: 600 }}>⚠️ {t.content}</span>
+                      </div>
+                    ) : (
+                      <div className="bubble-assistant">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            code({ inline, className, children, ...props }: any) {
+                              const match = /language-(\w+)/.exec(className || "");
+                              return !inline && match ? (
+                                <SyntaxHighlighter
+                                  style={oneDark}
+                                  language={match[1]}
+                                  PreTag="div"
+                                  customStyle={{ borderRadius: 10, fontSize: "0.8rem", margin: "10px 0" }}
+                                  {...props}
+                                >
+                                  {String(children).replace(/\n$/, "")}
+                                </SyntaxHighlighter>
+                              ) : (
+                                <code {...props}>{children}</code>
+                              );
+                            },
+                          }}
+                        >
+                          {t.content}
+                        </ReactMarkdown>
+                        {t.streaming && (
+                          <span style={{ display: "inline-block", width: 3, height: 14, background: "#6366f1", marginLeft: 4, verticalAlign: "middle" }} />
+                        )}
+                        {t.meta && (
+                          <div className="bubble-meta">
+                            <span>🤖 {t.meta.model}</span>
+                            <span>⚡ {t.meta.latency_ms} ms</span>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
-                ))}
-              </>
-            )}
-
-            {/* Live Diagnostics Card */}
-            <div className="engine-card">
-              <div className="engine-header">
-                <span className="engine-title">Ops Engine</span>
-                <span className="engine-badge">Active</span>
-              </div>
-              <div className="engine-meta">
-                <span>⚡ Stream: SSE</span>
-                <span style={{ margin: "0 4px" }}>•</span>
-                <span>Port 8000</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="sidebar-footer">OpsPilot v0.1.0 • Enterprise Operations</div>
-        </aside>
-
-        {/* ── MAIN ────────────────────────────────────────── */}
-        <div className="main">
-
-          {/* Top bar */}
-          <div className="topbar">
-            <div style={{ display: "flex", alignItems: "center" }}>
-              <button
-                className="mobile-toggle"
-                onClick={() => setSidebarOpen(prev => !prev)}
-                title="Toggle menu"
-                type="button"
-              >
-                {I.menu}
-              </button>
-              <span className="topbar-title">
-                {turns.length === 0 ? "New Conversation" : "Chat"}
-              </span>
-              {msgCount > 0 && (
-                <span className="topbar-sub">
-                  {msgCount} message{msgCount !== 1 ? "s" : ""}
-                </span>
-              )}
-            </div>
-            {turns.length > 0 && (
-              <button className="btn-clear" onClick={clearChat}>
-                {I.trash} Clear chat
-              </button>
-            )}
-          </div>
-
-          {/* Messages */}
-          <div className="messages-wrap">
-            <div className="messages-inner">
-
-              {/* Empty state */}
-              {turns.length === 0 && (
-                <div className="empty-state">
-                  <div className="empty-icon">🤖</div>
-                  <h1 className="empty-title">What can I help with?</h1>
-                  <p className="empty-sub">
-                    Expert answers on DevOps, infrastructure, code, debugging,<br />
-                    and anything engineering — all running locally.
-                  </p>
-                  <div className="chips-grid">
-                    {QUICK_TOPICS.map(({ icon, label, prompt }) => (
-                      <button className="chip" key={label} onClick={() => sendMessage(prompt)}>
-                        <span style={{ marginRight: 7 }}>{icon}</span>{label}
-                      </button>
-                    ))}
-                  </div>
                 </div>
-              )}
-
-              {/* Turn list */}
-              {turns.map((t, i) => {
-                const showTyping = t.streaming && t.content === "";
-                return (
-                  <div key={i} className={`msg-row msg-enter ${t.role === "user" ? "user" : ""}`}>
-                    {/* Avatar */}
-                    <div className={`avatar ${t.role === "user" ? "user" : t.error ? "err" : "bot"}`}>
-                      {t.role === "user" ? I.user : I.bot}
-                    </div>
-
-                    {/* Bubble */}
-                    <div className="bubble">
-                      {t.role === "user" ? (
-                        <div className="bubble-user">{t.content}</div>
-                      ) : showTyping ? (
-                        <div className="typing-bubble">
-                          <div className="typing-dot" />
-                          <div className="typing-dot" />
-                          <div className="typing-dot" />
-                        </div>
-                      ) : t.error ? (
-                        t.content.includes("FREE TOKEN LIMIT") || t.content.includes("SAFETY") ? (
-                          <div className="bubble-warning">
-                            <div className="warning-badge">🛡️ Zero-Cost Protection Active</div>
-                            <div className="warning-text">{t.content}</div>
-                            <button
-                              type="button"
-                              className="warning-action"
-                              onClick={() => setProvider("ollama")}
-                            >
-                              🖥️ Switch to Unlimited Local Ollama
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="bubble-err">⚠️ {t.content}</div>
-                        )
-                      ) : (
-                        <div className="bubble-bot">
-                          <AssistantContent content={t.content} streaming={t.streaming} />
-                          {t.meta && (
-                            <div className="bubble-meta">
-                              <span>{I.cpu} {t.meta.model}</span>
-                              <span>⚡ {t.meta.latency_ms} ms</span>
-                              {t.meta.completion_tokens != null && (
-                                <span>📝 {t.meta.completion_tokens} tokens</span>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-
-              <div ref={bottomRef} />
-            </div>
+              ))
+            )}
+            <div ref={bottomRef} />
           </div>
-
-          {/* Input bar */}
-          <div className="input-wrap">
-            <div className="input-inner">
-              <form
-                onSubmit={e => { e.preventDefault(); sendMessage(input); }}
-              >
-                <div className="input-box">
-                  <textarea
-                    ref={textareaRef}
-                    className="input-textarea"
-                    value={input}
-                    onChange={e => setInput(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(input); }
-                    }}
-                    placeholder="Ask anything… (Enter ↵ to send, Shift+Enter for newline)"
-                    maxLength={8000}
-                    rows={1}
-                    autoFocus
-                  />
-                  <button
-                    type="submit"
-                    className={`send-btn ${isActive ? "active" : "disabled"}`}
-                    disabled={isPendingUI || !input.trim()}
-                  >
-                    {I.send}
-                  </button>
-                </div>
-              </form>
-              <p className="input-hint">
-                OpsPilot runs locally via Ollama · no data leaves your machine
-              </p>
-            </div>
-          </div>
-
         </div>
-      </div>
-    </>
+
+        {/* Floating Input Capsule */}
+        <div className="chat-input-wrapper">
+          <div className="chat-input-box">
+            <textarea
+              ref={textareaRef}
+              className="chat-textarea"
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  sendMessage(input);
+                }
+              }}
+              placeholder="Ask anything… (Enter to send)"
+              rows={1}
+            />
+            <button
+              className="send-button"
+              type="button"
+              onClick={() => sendMessage(input)}
+              disabled={isPendingUI || !input.trim()}
+              title="Send message"
+            >
+              {I.send}
+            </button>
+          </div>
+          <div className="input-disclaimer">
+            OpsPilot 24/7 Cloud • Free Model Active • Zero Cost Protected
+          </div>
+        </div>
+      </main>
+    </div>
   );
 }
