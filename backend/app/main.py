@@ -29,8 +29,14 @@ async def health() -> dict[str, str]:
     return {"status": "ok", "service": "opspilot-api", "version": app.version}
 
 
-# Production deployment: Mount frontend dist if it exists
-frontend_dist = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
-if frontend_dist.is_dir():
-    app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="frontend")
+# Production deployment: Mount frontend dist (works in Docker container & local dev)
+possible_dists = [
+    Path(__file__).resolve().parent.parent / "frontend" / "dist",
+    Path(__file__).resolve().parent.parent.parent / "frontend" / "dist",
+    Path("/srv/frontend/dist"),
+]
+for dist in possible_dists:
+    if dist.is_dir():
+        app.mount("/", StaticFiles(directory=str(dist), html=True), name="frontend")
+        break
 
