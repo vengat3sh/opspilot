@@ -168,7 +168,13 @@ async def chat(settings: Settings, messages: list[ChatMessage], provider: str | 
     logger.info("chat provider=%s messages=%d", chosen, len(messages))
     if chosen == "cloud":
         return await _cloud_chat(settings, messages)
-    return await _ollama_chat(settings, messages)
+    try:
+        return await _ollama_chat(settings, messages)
+    except LLMError as exc:
+        if "Ollama is not reachable" in str(exc) and bool(settings.cloud_api_key.get_secret_value()):
+            logger.info("Ollama unreachable, auto-falling back to cloud")
+            return await _cloud_chat(settings, messages)
+        raise
 
 
 # ---------------------------------------------------------------------------
@@ -328,8 +334,16 @@ async def stream_chat(
         async for token in stream_cloud(settings, messages):
             yield token
     else:
-        async for token in stream_ollama(settings, messages):
-            yield token
+        try:
+            async for token in stream_ollama(settings, messages):
+                yield token
+        except LLMError as exc:
+            if "Ollama is not reachable" in str(exc) and bool(settings.cloud_api_key.get_secret_value()):
+                logger.info("Ollama unreachable on cloud deployment, auto-falling back to cloud stream")
+                async for token in stream_cloud(settings, messages):
+                    yield token
+            else:
+                raise
 
 
 async def ollama_status(settings: Settings) -> tuple[bool, list[str]]:

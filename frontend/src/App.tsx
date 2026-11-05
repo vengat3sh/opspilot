@@ -112,7 +112,7 @@ const QUICK_TOPICS = [
 export default function App() {
   const [turns, setTurns]           = useState<Turn[]>([]);
   const [input, setInput]           = useState("");
-  const [provider, setProvider]     = useState<Provider>("ollama");
+  const [provider, setProvider]     = useState<Provider>("cloud");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const isPendingRef                = useRef(false);
   const [isPendingUI, setIsPendingUI] = useState(false);
@@ -121,6 +121,17 @@ export default function App() {
   const textareaRef                 = useRef<HTMLTextAreaElement>(null);
 
   const status = useQuery({ queryKey: ["llm-status"], queryFn: getLLMStatus, refetchInterval: 15_000 });
+
+  // Automatically select the best active provider
+  useEffect(() => {
+    if (status.data) {
+      if (!status.data.ollama_reachable && status.data.cloud_configured) {
+        setProvider("cloud");
+      } else if (status.data.provider) {
+        setProvider(status.data.provider as Provider);
+      }
+    }
+  }, [status.data]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
