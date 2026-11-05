@@ -135,6 +135,74 @@ html, body, #root {
   padding: 0 4px;
 }
 
+/* History Section in Sidebar */
+.history-section {
+  margin-bottom: 18px;
+}
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+.history-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: #334155;
+  font-size: 12.5px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+.history-item:hover {
+  background: #f1f5f9;
+  border-color: var(--border);
+  color: var(--primary);
+}
+.history-item.active {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: var(--primary);
+  font-weight: 600;
+}
+.history-title {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 6px;
+}
+.history-del-btn {
+  opacity: 0.35;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+.history-item:hover .history-del-btn {
+  opacity: 1;
+}
+.history-del-btn:hover {
+  color: #ef4444;
+  background: #fee2e2;
+}
+
 .status-card {
   background: #f8fafc;
   border: 1px solid var(--border);
