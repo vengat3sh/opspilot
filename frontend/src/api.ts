@@ -38,6 +38,8 @@ export interface StreamMeta {
   latency_ms: number;
   prompt_tokens: number | null;
   completion_tokens: number | null;
+  agent?: string;
+  citations?: string[];
 }
 
 export interface DashboardMetrics {
@@ -169,6 +171,7 @@ export async function createTicket(ticket: { title: string; description: string;
 export function streamChat(
   messages: ChatMessage[],
   provider: Provider | undefined,
+  agent: string | undefined,
   onToken: (token: string) => void,
   onDone: (meta: StreamMeta) => void,
   onError: (msg: string) => void,
@@ -179,7 +182,7 @@ export function streamChat(
   fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages, provider }),
+    body: JSON.stringify({ messages, provider, agent }),
     signal: controller.signal,
   })
     .then(async (res) => {
@@ -220,6 +223,8 @@ export function streamChat(
                   latency_ms: Number(obj.latency_ms ?? 0),
                   prompt_tokens: obj.prompt_tokens != null ? Number(obj.prompt_tokens) : null,
                   completion_tokens: obj.completion_tokens != null ? Number(obj.completion_tokens) : null,
+                  agent: obj.agent ? String(obj.agent) : undefined,
+                  citations: Array.isArray(obj.citations) ? (obj.citations as string[]) : undefined,
                 });
                 return;
               }

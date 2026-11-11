@@ -110,6 +110,7 @@ const QUICK_TOPICS = [
 
 export default function App() {
   const [activeTab, setActiveTab]     = useState<NavTab>("workspace");
+  const [selectedAgent, setSelectedAgent] = useState<string>("auto");
   const [sessions, setSessions]       = useState<ChatSession[]>(() => loadSavedSessions());
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [turns, setTurns]             = useState<Turn[]>([]);
@@ -237,6 +238,7 @@ export default function App() {
     abortRef.current = streamChat(
       messages,
       provider,
+      selectedAgent,
       token => setTurns(prev => {
         const c = [...prev], l = c[c.length - 1];
         if (l?.streaming) c[c.length - 1] = { ...l, content: l.content + token };
@@ -268,8 +270,22 @@ export default function App() {
   }
 
   function handleSelectAgent(agentId: string) {
+    const raw = agentId.replace("agent-", "");
+    setSelectedAgent(raw);
     setActiveTab("workspace");
-    sendMessage(`Hello! You are operating as the ${agentId.replace("agent-", "").toUpperCase()} Agent. What operations or investigations can you assist me with right now?`);
+    sendMessage(`Hello! You are operating as the ${raw.toUpperCase()} Agent. What operations or investigations can you assist me with right now?`);
+  }
+
+  function exportChatMarkdown() {
+    if (turns.length === 0) return;
+    const content = turns.map(t => `### ${t.role.toUpperCase()}\n\n${t.content}\n\n`).join("\n---\n\n");
+    const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `OpsPilot-Session-${Date.now()}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   function handleInvestigateTicket(ticket: TicketItem) {
@@ -485,6 +501,12 @@ export default function App() {
               <span className="nav-pill-text">{isCloudOnline ? "24/7 Cloud" : isOllamaOnline ? "Local Ollama" : "Connecting..."}</span>
             </div>
 
+            {activeTab === "workspace" && turns.length > 0 && (
+              <button className="clear-btn" onClick={exportChatMarkdown} type="button" title="Export Conversation to Markdown">
+                ⬇️ <span className="btn-label-desktop">Export</span>
+              </button>
+            )}
+
             {activeTab === "workspace" && (
               <button className="clear-btn" onClick={startNewChat} type="button" title="New Conversation">
                 {I.plus} <span className="btn-label-desktop">New</span>
@@ -510,7 +532,7 @@ export default function App() {
                     <div className="hero-avatar">🚀</div>
                     <h1 className="hero-title">How can I assist your operations today?</h1>
                     <p className="hero-subtitle">
-                      Ask anything about DevOps runbooks, incident triage, Docker, Kubernetes, enterprise policies, or multi-agent automation.
+                      Chat with OpsPilot to investigate incidents, generate runbooks, review infrastructure changes, and coordinate multi-agent enterprise operations.
                     </p>
                     <div className="hero-chips">
                       {QUICK_TOPICS.map(item => (
@@ -610,7 +632,7 @@ export default function App() {
                 </button>
               </div>
               <div className="input-disclaimer">
-                OpsPilot 24/7 Cloud • Zero Cost Protected • Enterprise Agent Guard
+                OpsPilot Enterprise • Secure cloud routing • Human-in-the-loop safeguards
               </div>
             </div>
           </>

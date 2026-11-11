@@ -26,6 +26,7 @@ async def chat(req: ChatRequest, settings: SettingsDep) -> ChatResponse:
         latency_ms=result.latency_ms,
         prompt_tokens=result.prompt_tokens,
         completion_tokens=result.completion_tokens,
+        agent=req.agent,
     )
 
 
@@ -35,7 +36,7 @@ async def chat_stream(req: ChatRequest, settings: SettingsDep) -> StreamingRespo
 
     async def event_generator():
         try:
-            async for token in llm.stream_chat(settings, req.messages, req.provider):
+            async for token in llm.stream_chat(settings, req.messages, req.provider, req.agent):
                 # Control tokens (__done__, __error__) are already JSON-encoded
                 # dicts from llm.py — pass them through raw so the frontend
                 # receives a JSON object, not a double-encoded string.

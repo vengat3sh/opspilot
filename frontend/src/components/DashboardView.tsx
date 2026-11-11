@@ -17,8 +17,14 @@ export default function DashboardView() {
             <p className="view-subtitle">Live system telemetry & AI operations intelligence</p>
           </div>
         </div>
-        <div style={{ padding: "40px 0", textAlign: "center", color: "#94a3b8" }}>
-          Loading real metrics...
+        <div className="dashboard-skeleton-grid">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="skeleton dashboard-skeleton-card" />
+          ))}
+        </div>
+        <div className="dashboard-skeleton-panels">
+          <div className="skeleton dashboard-skeleton-panel" />
+          <div className="skeleton dashboard-skeleton-panel" />
         </div>
       </div>
     );
