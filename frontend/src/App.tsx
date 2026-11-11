@@ -71,7 +71,8 @@ const I = {
 };
 
 export default function App() {
-  const [activeTab, setActiveTab]     = useState<NavTab>("engineer");
+  const [activeTab, setActiveTabState] = useState<NavTab>("engineer");
+  const [tabHistory, setTabHistory]     = useState<NavTab[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<string>("auto");
   const [sessions, setSessions]       = useState<ChatSession[]>(() => loadSavedSessions());
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -82,6 +83,25 @@ export default function App() {
   const isPendingRef                  = useRef(false);
   const [isPendingUI, setIsPendingUI] = useState(false);
   const abortRef                      = useRef<AbortController | null>(null);
+
+  function setActiveTab(next: NavTab) {
+    setActiveTabState(prev => {
+      if (prev !== next) setTabHistory(h => [...h, prev].slice(-10));
+      return next;
+    });
+  }
+
+  function goBack() {
+    setTabHistory(h => {
+      if (h.length === 0) {
+        setActiveTabState("engineer");
+        return h;
+      }
+      const prev = h[h.length - 1];
+      setActiveTabState(prev);
+      return h.slice(0, -1);
+    });
+  }
 
   const status = useQuery({ queryKey: ["llm-status"], queryFn: getLLMStatus, refetchInterval: 15_000 });
   const approvalsQuery = useQuery({ queryKey: ["approvals"], queryFn: getApprovals, refetchInterval: 15_000 });
@@ -111,7 +131,7 @@ export default function App() {
     setTurns([]);
     setInput("");
     setPending(false);
-    setActiveTab("engineer");
+    setActiveTabState("engineer");
     setSidebarOpen(false);
   }
 
@@ -121,7 +141,7 @@ export default function App() {
     setTurns(session.turns);
     setInput("");
     setPending(false);
-    setActiveTab("engineer");
+    setActiveTabState("engineer");
     setSidebarOpen(false);
   }
 
@@ -266,11 +286,14 @@ export default function App() {
       {/* ── App Sidebar ── */}
       <aside className={`app-sidebar ${sidebarOpen ? "open" : ""}`}>
         <div className="sidebar-header">
-          <div className="brand-icon">⚡</div>
-          <div>
-            <div className="brand-name">OpsPilot</div>
-            <span className="brand-tag">ENTERPRISE AI PLATFORM</span>
+          <div className="sidebar-header-left">
+            <div className="brand-icon">⚡</div>
+            <div>
+              <div className="brand-name">OpsPilot</div>
+              <span className="brand-tag">ENTERPRISE AI PLATFORM</span>
+            </div>
           </div>
+          <button className="sidebar-close-btn" onClick={() => setSidebarOpen(false)} type="button" title="Close navigation" aria-label="Close navigation">✕</button>
         </div>
 
         <div className="sidebar-content">
@@ -426,17 +449,9 @@ export default function App() {
         {/* Navigation Topbar */}
         <header className="chat-navbar">
           <div className="navbar-left">
-            <button
-              className="nav-toggle-btn"
-              onClick={() => setSidebarOpen(prev => !prev)}
-              type="button"
-              aria-label="Open Navigation Menu"
-              title="Open Navigation"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="18" x2="21" y2="18" />
-              </svg>
-            </button>
+            <button className="nav-icon-btn" onClick={goBack} type="button" title="Go back" aria-label="Go back" disabled={tabHistory.length === 0} style={tabHistory.length === 0 ? { opacity: 0.45, cursor: "not-allowed" } : undefined}>←</button>
+            <button className="nav-icon-btn" onClick={() => setSidebarOpen(true)} type="button" title="Open navigation" aria-label="Open navigation">☰</button>
+            <button className="nav-icon-btn nav-close-inline" onClick={() => setSidebarOpen(false)} type="button" title="Close navigation" aria-label="Close navigation">✕</button>
             <div className="nav-brand">
               <span className="brand-icon-sm">⚡</span>
               <span className="brand-text-sm">OpsPilot</span>
