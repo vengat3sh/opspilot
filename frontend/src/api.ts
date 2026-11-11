@@ -102,6 +102,69 @@ export interface TicketItem {
   category: string;
 }
 
+export interface ProjectItem {
+  id: string;
+  name: string;
+  repo_provider: string;
+  repo_url: string;
+  default_branch: string;
+  status: string;
+  language: string;
+  framework: string;
+  last_synced: string;
+  health: string;
+  environments: number;
+  open_prs: number;
+  pending_changes: number;
+}
+
+export interface EnvironmentItem {
+  id: string;
+  project_id: string;
+  name: string;
+  provider: string;
+  status: string;
+  url?: string | null;
+  branch: string;
+  last_deploy?: string | null;
+}
+
+export interface DeploymentItem {
+  id: string;
+  project_id: string;
+  environment: string;
+  status: string;
+  commit: string;
+  branch: string;
+  created_at: string;
+  summary: string;
+  url?: string | null;
+}
+
+export interface IncidentItem {
+  id: string;
+  project_id: string;
+  title: string;
+  severity: "low" | "medium" | "high" | "critical";
+  status: "open" | "investigating" | "mitigated" | "resolved";
+  service: string;
+  detected_at: string;
+  summary: string;
+  recommendation: string;
+}
+
+export interface WorkflowStage {
+  name: string;
+  status: "pending" | "active" | "done" | "failed";
+}
+
+export interface ProjectWorkflow {
+  project_id: string;
+  stages: WorkflowStage[];
+  current_step: string;
+  approvals_required: number;
+}
+
 // ── API Functions ──────────────────────────────────────────────────────────
 
 export async function sendChat(messages: ChatMessage[], provider?: Provider, agent?: string): Promise<ChatResponse> {
@@ -160,6 +223,44 @@ export async function getTickets(): Promise<TicketItem[]> {
 
 export async function createTicket(ticket: { title: string; description: string; priority: string; category: string }): Promise<TicketItem> {
   const { data } = await http.post<TicketItem>("/api/operations/tickets", ticket);
+  return data;
+}
+
+export async function getProjects(): Promise<ProjectItem[]> {
+  const { data } = await http.get<ProjectItem[]>("/api/v1/projects");
+  return data;
+}
+
+export async function createProject(payload: { name: string; repo_provider?: string; repo_url: string; default_branch?: string }): Promise<ProjectItem> {
+  const { data } = await http.post<ProjectItem>("/api/v1/projects", payload);
+  return data;
+}
+
+export async function getProjectWorkflow(projectId: string): Promise<ProjectWorkflow> {
+  const { data } = await http.get<ProjectWorkflow>(`/api/v1/projects/${projectId}/workflow`);
+  return data;
+}
+
+export async function getEnvironments(projectId?: string): Promise<EnvironmentItem[]> {
+  const url = projectId ? `/api/v1/projects/${projectId}/environments` : "/api/v1/environments";
+  const { data } = await http.get<EnvironmentItem[]>(url);
+  return data;
+}
+
+export async function getDeployments(projectId?: string): Promise<DeploymentItem[]> {
+  const url = projectId ? `/api/v1/projects/${projectId}/deployments` : "/api/v1/deployments";
+  const { data } = await http.get<DeploymentItem[]>(url);
+  return data;
+}
+
+export async function rollbackDeployment(projectId: string, deploymentId: string): Promise<DeploymentItem> {
+  const { data } = await http.post<DeploymentItem>(`/api/v1/projects/${projectId}/deployments/${deploymentId}/rollback`);
+  return data;
+}
+
+export async function getIncidents(projectId?: string): Promise<IncidentItem[]> {
+  const url = projectId ? `/api/v1/projects/${projectId}/incidents` : "/api/v1/incidents";
+  const { data } = await http.get<IncidentItem[]>(url);
   return data;
 }
 

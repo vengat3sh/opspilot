@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
-from .routers import chat, operations
+from .routers import chat, operations, projects
 
 settings = get_settings()
 logging.basicConfig(
@@ -36,6 +36,7 @@ async def add_no_cache_to_html(request, call_next):
 
 app.include_router(chat.router)
 app.include_router(operations.router)
+app.include_router(projects.router)
 
 
 @app.get("/health")

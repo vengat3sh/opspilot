@@ -114,3 +114,75 @@ class TicketCreateRequest(BaseModel):
     description: str = Field(min_length=5, max_length=2000)
     priority: Literal["low", "medium", "high", "critical"] = "medium"
     category: str = "IT Support"
+
+
+# ── OpsPilot 3.0 Project / Cloud / Deployment Schemas ───────────────────────
+
+class ProjectItem(BaseModel):
+    id: str
+    name: str
+    repo_provider: str
+    repo_url: str
+    default_branch: str
+    status: str
+    language: str
+    framework: str
+    last_synced: str
+    health: str
+    environments: int
+    open_prs: int
+    pending_changes: int
+
+
+class ProjectCreateRequest(BaseModel):
+    name: str
+    repo_provider: str = "github"
+    repo_url: str
+    default_branch: str = "main"
+
+
+class EnvironmentItem(BaseModel):
+    id: str
+    project_id: str
+    name: str
+    provider: str
+    status: str
+    url: str | None = None
+    branch: str = "main"
+    last_deploy: str | None = None
+
+
+class DeploymentItem(BaseModel):
+    id: str
+    project_id: str
+    environment: str
+    status: str
+    commit: str
+    branch: str
+    created_at: str
+    summary: str
+    url: str | None = None
+
+
+class IncidentItem(BaseModel):
+    id: str
+    project_id: str
+    title: str
+    severity: Literal["low", "medium", "high", "critical"]
+    status: Literal["open", "investigating", "mitigated", "resolved"]
+    service: str
+    detected_at: str
+    summary: str
+    recommendation: str
+
+
+class WorkflowStage(BaseModel):
+    name: str
+    status: Literal["pending", "active", "done", "failed"]
+
+
+class ProjectWorkflow(BaseModel):
+    project_id: str
+    stages: list[WorkflowStage]
+    current_step: str
+    approvals_required: int
