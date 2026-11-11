@@ -94,12 +94,12 @@ export default function DeveloperCommandCenter({
 }: {
   tab: Tab; onSelectProject: (p: ProjectItem) => void; onOpenEngineer: () => void; onConnectRepo: () => void; searchQuery: string;
 }) {
-  const projectsQ = useQuery({ queryKey: ["projects"], queryFn: getProjects });
-  const metricsQ = useQuery({ queryKey: ["dashboard-metrics"], queryFn: getDashboardMetrics });
-  const deploymentsQ = useQuery({ queryKey: ["deployments"], queryFn: () => getDeployments() });
-  const envsQ = useQuery({ queryKey: ["environments"], queryFn: () => getEnvironments() });
-  const incidentsQ = useQuery({ queryKey: ["incidents"], queryFn: () => getIncidents() });
-  const approvalsQ = useQuery({ queryKey: ["approvals"], queryFn: getApprovals });
+  const projectsQ = useQuery({ queryKey: ["projects"], queryFn: getProjects, staleTime: 30_000 });
+  const metricsQ = useQuery({ queryKey: ["dashboard-metrics"], queryFn: getDashboardMetrics, staleTime: 15_000 });
+  const deploymentsQ = useQuery({ queryKey: ["deployments"], queryFn: () => getDeployments(), staleTime: 20_000 });
+  const envsQ = useQuery({ queryKey: ["environments"], queryFn: () => getEnvironments(), staleTime: 30_000 });
+  const incidentsQ = useQuery({ queryKey: ["incidents"], queryFn: () => getIncidents(), staleTime: 20_000 });
+  const approvalsQ = useQuery({ queryKey: ["approvals"], queryFn: getApprovals, staleTime: 15_000 });
 
   const projects = projectsQ.data || [];
   const deployments = deploymentsQ.data || [];
@@ -118,7 +118,7 @@ export default function DeveloperCommandCenter({
       <div className="dcc-page">
         <div className="dcc-page-head"><h2>My Projects</h2><button className="dcc-btn primary" onClick={onConnectRepo}>Connect Repository</button></div>
         <Panel title="Connected projects">
-          {projectsQ.isLoading ? <div className="dcc-muted">Loading projects...</div> : filteredProjects.length === 0 ? <div className="dcc-empty">No projects connected yet. Connect a repository to start analysis, engineering, and deployments.</div> : (
+          {projectsQ.isLoading ? <div className="dcc-muted">Loading projects...</div> : projectsQ.isError ? <div className="dcc-empty">Unable to load projects. Check backend API connectivity.</div> : filteredProjects.length === 0 ? <div className="dcc-empty">No projects connected yet. Connect a repository to start analysis, engineering, and deployments.</div> : (
             <div className="dcc-project-grid">
               {filteredProjects.map(p => (
                 <button key={p.id} className="dcc-project-card" onClick={() => onSelectProject(p)}>
@@ -197,7 +197,7 @@ export default function DeveloperCommandCenter({
     return (
       <div className="dcc-page"><div className="dcc-page-head"><h2>Cloud Environments</h2></div>
         <Panel title="Configured environments">
-          {envsQ.isLoading ? <div className="dcc-muted">Loading environments...</div> : envs.length === 0 ? <div className="dcc-empty">No environments configured.</div> : (
+          {envsQ.isLoading ? <div className="dcc-muted">Loading environments...</div> : envsQ.isError ? <div className="dcc-empty">Unable to load environments. Check backend API connectivity.</div> : envs.length === 0 ? <div className="dcc-empty">No environments configured.</div> : (
             <div className="dcc-list">
               {envs.map(e => (
                 <div key={e.id} className="dcc-row">
@@ -231,7 +231,7 @@ export default function DeveloperCommandCenter({
     return (
       <div className="dcc-page"><div className="dcc-page-head"><h2>{tab === "build" ? "Build & Deploy" : "Deployment History"}</h2></div>
         <Panel title={tab === "build" ? "Deployment pipeline" : "Recent deployments"}>
-          {deploymentsQ.isLoading ? <div className="dcc-muted">Loading deployments...</div> : deployments.length === 0 ? <div className="dcc-empty">No deployments found.</div> : (
+          {deploymentsQ.isLoading ? <div className="dcc-muted">Loading deployments...</div> : deploymentsQ.isError ? <div className="dcc-empty">Unable to load deployments. Check backend API connectivity.</div> : deployments.length === 0 ? <div className="dcc-empty">No deployments found.</div> : (
             <div className="dcc-list">
               {deployments.map(d => (
                 <div key={d.id} className="dcc-row">
@@ -270,7 +270,7 @@ export default function DeveloperCommandCenter({
     return (
       <div className="dcc-page"><div className="dcc-page-head"><h2>Incidents</h2></div>
         <Panel title="Incident management">
-          {incidentsQ.isLoading ? <div className="dcc-muted">Loading incidents...</div> : incidents.length === 0 ? <div className="dcc-empty">No incidents reported.</div> : (
+          {incidentsQ.isLoading ? <div className="dcc-muted">Loading incidents...</div> : incidentsQ.isError ? <div className="dcc-empty">Unable to load incidents. Check backend API connectivity.</div> : incidents.length === 0 ? <div className="dcc-empty">No incidents reported.</div> : (
             <div className="dcc-list">{incidents.map(i => (
               <div key={i.id} className="dcc-row">
                 <div><strong>{i.title}</strong> <span className={`dcc-pill ${i.severity}`}>{i.severity}</span><div className="dcc-muted">{i.service} • {i.detected_at} • {i.status}</div><div className="dcc-muted" style={{ marginTop: 4 }}>{i.summary}</div><div className="dcc-reco"><strong>Recommendation:</strong> {i.recommendation}</div></div>
@@ -286,7 +286,7 @@ export default function DeveloperCommandCenter({
     return (
       <div className="dcc-page"><div className="dcc-page-head"><h2>Approvals</h2></div>
         <Panel title="Approval queue">
-          {approvalsQ.isLoading ? <div className="dcc-muted">Loading approvals...</div> : approvals.length === 0 ? <div className="dcc-empty">No approvals pending.</div> : (
+          {approvalsQ.isLoading ? <div className="dcc-muted">Loading approvals...</div> : approvalsQ.isError ? <div className="dcc-empty">Unable to load approvals. Check backend API connectivity.</div> : approvals.length === 0 ? <div className="dcc-empty">No approvals pending.</div> : (
             <div className="dcc-list">{approvals.map(a => (
               <div key={a.id} className="dcc-row"><div><strong>{a.title}</strong><div className="dcc-muted">{a.details}</div><div className="dcc-muted">{a.requested_by} • {a.timestamp}</div></div><span className={`dcc-pill ${a.risk_level}`}>{a.status}</span></div>
             ))}</div>
