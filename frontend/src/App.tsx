@@ -468,24 +468,26 @@ export default function App() {
               aria-label="Open Navigation Menu"
               title="Open Navigation"
             >
-              {I.menu}
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="18" x2="21" y2="18" />
+              </svg>
             </button>
-            <div className="nav-brand-mobile">
+            <div className="nav-brand">
               <span className="brand-icon-sm">⚡</span>
               <span className="brand-text-sm">OpsPilot</span>
             </div>
-            <span className="nav-title">• {tabTitles[activeTab]}</span>
+            <span className="nav-active-pill">{tabTitles[activeTab]}</span>
           </div>
 
           <div className="navbar-right">
-            <span className="nav-pill">
+            <div className="nav-pill">
               <span className={`dot ${isCloudOnline || isOllamaOnline ? "green" : "amber"}`} />
               <span className="nav-pill-text">{isCloudOnline ? "24/7 Cloud" : isOllamaOnline ? "Local Ollama" : "Connecting..."}</span>
-            </span>
+            </div>
 
-            {activeTab === "workspace" && turns.length > 0 && (
+            {activeTab === "workspace" && (
               <button className="clear-btn" onClick={startNewChat} type="button" title="New Conversation">
-                {I.plus} New
+                {I.plus} <span className="btn-label-desktop">New</span>
               </button>
             )}
           </div>

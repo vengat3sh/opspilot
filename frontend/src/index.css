@@ -301,17 +301,18 @@ html, body, #root {
 .chat-navbar {
   height: 56px;
   min-height: 56px;
+  max-height: 56px;
   flex-shrink: 0;
-  background: #ffffff;
-  border-bottom: 1px solid var(--border);
+  background: #0f172a;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px;
+  padding: 0 16px;
   z-index: 30;
   position: sticky;
   top: 0;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
 }
 
 .navbar-left {
@@ -324,38 +325,39 @@ html, body, #root {
 .navbar-right {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-shrink: 0;
 }
 
 .nav-toggle-btn {
-  display: none;
-  background: #f1f5f9;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  display: inline-flex;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
   width: 36px;
   height: 36px;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: var(--text-main);
+  color: #ffffff;
   flex-shrink: 0;
-  transition: all 0.14s;
+  transition: all 0.15s;
 }
 .nav-toggle-btn:hover {
-  background: #e2e8f0;
+  background: rgba(255, 255, 255, 0.15);
 }
 
-.nav-brand-mobile {
-  display: none;
+.nav-brand {
+  display: flex;
   align-items: center;
   gap: 7px;
+  flex-shrink: 0;
 }
 .brand-text-sm {
   font-size: 15px;
   font-weight: 800;
-  letter-spacing: -0.025em;
-  color: #0f172a;
+  letter-spacing: -0.02em;
+  color: #ffffff;
 }
 .brand-icon-sm {
   width: 26px;
@@ -367,27 +369,73 @@ html, body, #root {
   justify-content: center;
   font-size: 13px;
   color: #fff;
+  flex-shrink: 0;
 }
 
-.nav-title {
-  font-size: 14.5px;
-  font-weight: 700;
-  color: #0f172a;
+.nav-active-pill {
+  font-size: 12px;
+  font-weight: 600;
+  color: #cbd5e1;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 3px 9px;
+  border-radius: 20px;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
 }
 
 .nav-pill {
   font-size: 11px;
   font-weight: 600;
-  padding: 3px 9px;
+  padding: 3px 8px;
   border-radius: 20px;
-  background: #ecfdf5;
-  color: #059669;
-  border: 1px solid #a7f3d0;
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.3);
   display: flex;
   align-items: center;
   gap: 5px;
   white-space: nowrap;
+}
+
+.clear-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #cbd5e1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s;
+}
+.clear-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #f87171;
+}
+
+@media (min-width: 769px) {
+  .nav-toggle-btn {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .nav-active-pill {
+    display: none;
+  }
+  .nav-pill-text {
+    display: none;
+  }
+  .btn-label-desktop {
+    display: none;
+  }
 }
 
 .clear-btn {
@@ -738,58 +786,8 @@ html, body, #root {
 
 @media (max-width: 768px) {
   :root {
-    --navbar-h: 54px;
+    --navbar-h: 56px;
     --input-area-h: 80px;
-  }
-
-  /* Show hamburger button clearly with prominent styling */
-  .nav-toggle-btn {
-    display: inline-flex !important;
-    background: #f1f5f9;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    width: 36px;
-    height: 36px;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    color: var(--text-main);
-    flex-shrink: 0;
-  }
-
-  .nav-brand-mobile {
-    display: flex !important;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .nav-title {
-    font-size: 11.5px;
-    color: var(--text-muted);
-    font-weight: 600;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 130px;
-    display: inline-block !important;
-  }
-
-  .nav-pill-text {
-    display: none;
-  }
-  .nav-pill {
-    padding: 4px 6px;
-  }
-
-  .chat-navbar {
-    height: 54px;
-    min-height: 54px;
-    padding: 0 10px;
-    position: sticky;
-    top: 0;
-    z-index: 30;
-    background: #ffffff;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
   }
 
   /* Sidebar slides over as drawer */
