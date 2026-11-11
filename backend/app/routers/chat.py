@@ -66,10 +66,15 @@ async def chat_stream(req: ChatRequest, settings: SettingsDep) -> StreamingRespo
 @router.get("/llm/status", response_model=LLMStatus)
 async def llm_status(settings: SettingsDep) -> LLMStatus:
     reachable, models = await llm.ollama_status(settings)
+    cloud_ok = bool(settings.cloud_api_key.get_secret_value())
+    # If Ollama is down but cloud is configured (or on cloud deployment), report cloud
+    provider = settings.llm_provider
+    if not reachable:
+        provider = "cloud"
     return LLMStatus(
-        provider=settings.llm_provider,
+        provider=provider,
         ollama_reachable=reachable,
         ollama_models=models,
-        ollama_model_ready=settings.ollama_model in models,
-        cloud_configured=bool(settings.cloud_api_key.get_secret_value()),
+        ollama_model_ready=settings.ollama_model in models if reachable else False,
+        cloud_configured=cloud_ok,
     )

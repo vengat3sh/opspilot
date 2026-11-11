@@ -111,7 +111,7 @@ export default function App() {
   // Auto-switch to cloud provider in production/render
   useEffect(() => {
     if (status.data) {
-      if (!status.data.ollama_reachable && status.data.cloud_configured) {
+      if (!status.data.ollama_reachable) {
         setProvider("cloud");
       } else if (status.data.provider) {
         setProvider(status.data.provider as Provider);
@@ -307,26 +307,26 @@ export default function App() {
           <div className="section-label">Engine Telemetry</div>
           <div className="status-card">
             <div className="status-row">
-              <span style={{ color: "#64748b" }}>Cloud Engine</span>
+              <span>Cloud Engine</span>
               <div className="status-indicator">
                 <span className={`dot ${isCloudOnline ? "green" : "amber"}`} />
-                <span style={{ fontWeight: 600, color: isCloudOnline ? "#059669" : "#b45309" }}>
+                <span style={{ fontWeight: 600, color: isCloudOnline ? "#34d399" : "#fbbf24" }}>
                   {isCloudOnline ? "Active" : "Ready"}
                 </span>
               </div>
             </div>
             <div className="status-row" style={{ marginTop: 4 }}>
-              <span style={{ color: "#64748b" }}>Local Ollama</span>
+              <span>Local Ollama</span>
               <div className="status-indicator">
                 <span className={`dot ${isOllamaOnline ? "green" : "amber"}`} />
-                <span style={{ fontWeight: 600, color: isOllamaOnline ? "#059669" : "#64748b" }}>
+                <span style={{ fontWeight: 600, color: isOllamaOnline ? "#34d399" : "rgba(255,255,255,0.4)" }}>
                   {isOllamaOnline ? "Connected" : "Offline"}
                 </span>
               </div>
             </div>
-            <div className="status-row" style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid #f1f5f9" }}>
-              <span style={{ color: "#94a3b8", fontSize: 11 }}>Zero-Cost Guard</span>
-              <span style={{ color: "#6366f1", fontWeight: 700, fontSize: 11 }}>100% Free Tier</span>
+            <div className="status-row" style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+              <span style={{ fontSize: 11 }}>Zero-Cost Guard</span>
+              <span style={{ color: "#818cf8", fontWeight: 700, fontSize: 11 }}>100% Free Tier</span>
             </div>
           </div>
 
@@ -345,7 +345,7 @@ export default function App() {
           ))}
         </div>
 
-        <div style={{ padding: "12px 18px", borderTop: "1px solid var(--border)", fontSize: 11, color: "#94a3b8" }}>
+        <div className="sidebar-footer">
           OpsPilot v0.1.0 • Enterprise Cloud
         </div>
       </aside>
@@ -364,8 +364,13 @@ export default function App() {
               {I.menu}
             </button>
             <span className="nav-title">OpsPilot AI</span>
+            <div className="nav-brand-mobile">
+              <span className="brand-icon-sm">⚡</span>
+              <span>OpsPilot</span>
+            </div>
             <span className="nav-pill">
-              <span className="dot green" /> 24/7 Cloud
+              <span className={`dot ${isCloudOnline || isOllamaOnline ? "green" : "amber"}`} />
+              {isCloudOnline ? "24/7 Cloud" : isOllamaOnline ? "Local Ollama" : "Connecting..."}
             </span>
           </div>
 
@@ -411,8 +416,8 @@ export default function App() {
                     {t.role === "user" ? (
                       <div className="bubble-user">{t.content}</div>
                     ) : t.error ? (
-                      <div className="bubble-assistant" style={{ borderColor: "#fecaca", background: "#fef2f2" }}>
-                        <span style={{ color: "#dc2626", fontWeight: 600 }}>⚠️ {t.content}</span>
+                      <div className="bubble-assistant" style={{ borderColor: "#fca5a5", background: "#fef2f2" }}>
+                        <span style={{ color: "#dc2626", fontWeight: 600, whiteSpace: "pre-wrap" }}>⚠️ {t.content}</span>
                       </div>
                     ) : (
                       <div className="bubble-assistant">
@@ -440,9 +445,7 @@ export default function App() {
                         >
                           {t.content}
                         </ReactMarkdown>
-                        {t.streaming && (
-                          <span style={{ display: "inline-block", width: 3, height: 14, background: "#6366f1", marginLeft: 4, verticalAlign: "middle" }} />
-                        )}
+                        {t.streaming && <span className="typing-cursor" />}
                         {t.meta && (
                           <div className="bubble-meta">
                             <span>🤖 {t.meta.model}</span>

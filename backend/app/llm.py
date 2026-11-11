@@ -167,13 +167,25 @@ async def chat(settings: Settings, messages: list[ChatMessage], provider: str | 
     chosen = provider or settings.llm_provider
     logger.info("chat provider=%s messages=%d", chosen, len(messages))
     if chosen == "cloud":
+        api_key = settings.cloud_api_key.get_secret_value()
+        if not api_key:
+            raise LLMError(
+                "⚙️ Cloud AI is selected but CLOUD_API_KEY is not configured. "
+                "Set the CLOUD_API_KEY environment variable and redeploy."
+            )
         return await _cloud_chat(settings, messages)
     try:
         return await _ollama_chat(settings, messages)
     except LLMError as exc:
-        if "Ollama is not reachable" in str(exc) and bool(settings.cloud_api_key.get_secret_value()):
+        api_key = settings.cloud_api_key.get_secret_value()
+        if "Ollama is not reachable" in str(exc) and bool(api_key):
             logger.info("Ollama unreachable, auto-falling back to cloud")
             return await _cloud_chat(settings, messages)
+        if "Ollama is not reachable" in str(exc) and not bool(api_key):
+            raise LLMError(
+                "⚙️ Ollama is not running and no cloud API key is set. "
+                "Start `ollama serve` locally, or configure CLOUD_API_KEY and LLM_PROVIDER=cloud."
+            ) from exc
         raise
 
 
@@ -328,22 +340,52 @@ async def stream_cloud(settings: Settings, messages: list[ChatMessage]) -> Async
 async def stream_chat(
     settings: Settings, messages: list[ChatMessage], provider: str | None
 ) -> AsyncIterator[str]:
+    """Route streaming to the correct provider.
+
+    Priority:
+    1. If caller passes an explicit provider, honour it.
+    2. Otherwise use settings.llm_provider.
+    3. If chosen == "ollama" but Ollama is unreachable AND cloud is configured,
+       auto-fall back to cloud so Render / server deployments always work.
+    4. If cloud is chosen/fallen-back-to but no key is set, emit a helpful error.
+    """
     chosen = provider or settings.llm_provider
     logger.info("stream_chat provider=%s messages=%d", chosen, len(messages))
+
     if chosen == "cloud":
+        api_key = settings.cloud_api_key.get_secret_value()
+        if not api_key:
+            yield json.dumps({
+                "__error__": (
+                    "⚙️ Cloud AI is selected but CLOUD_API_KEY is not configured on this server. "
+                    "Please set the CLOUD_API_KEY environment variable in your Render dashboard "
+                    "and redeploy, or switch to Local (Ollama) mode."
+                )
+            })
+            return
         async for token in stream_cloud(settings, messages):
             yield token
-    else:
-        try:
-            async for token in stream_ollama(settings, messages):
+        return
+
+    # Ollama path — with graceful cloud fallback
+    try:
+        async for token in stream_ollama(settings, messages):
+            yield token
+    except LLMError as exc:
+        api_key = settings.cloud_api_key.get_secret_value()
+        if "Ollama is not reachable" in str(exc) and bool(api_key):
+            logger.info("Ollama unreachable, auto-falling back to cloud stream")
+            async for token in stream_cloud(settings, messages):
                 yield token
-        except LLMError as exc:
-            if "Ollama is not reachable" in str(exc) and bool(settings.cloud_api_key.get_secret_value()):
-                logger.info("Ollama unreachable on cloud deployment, auto-falling back to cloud stream")
-                async for token in stream_cloud(settings, messages):
-                    yield token
-            else:
-                raise
+        elif "Ollama is not reachable" in str(exc) and not bool(api_key):
+            yield json.dumps({
+                "__error__": (
+                    "⚙️ Ollama is not running and no cloud API key is configured. "
+                    "Start Ollama locally (`ollama serve`) or set CLOUD_API_KEY and LLM_PROVIDER=cloud."
+                )
+            })
+        else:
+            raise
 
 
 async def ollama_status(settings: Settings) -> tuple[bool, list[str]]:
