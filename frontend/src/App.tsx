@@ -118,7 +118,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const isPendingRef                  = useRef(false);
   const [isPendingUI, setIsPendingUI] = useState(false);
-  const bottomRef                     = useRef<HTMLDivElement>(null);
+  const chatScrollRef                 = useRef<HTMLDivElement>(null);
   const abortRef                      = useRef<AbortController | null>(null);
   const textareaRef                   = useRef<HTMLTextAreaElement>(null);
 
@@ -138,8 +138,8 @@ export default function App() {
   }, [status.data]);
 
   useEffect(() => {
-    if (activeTab === "workspace") {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (activeTab === "workspace" && chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
     }
   }, [turns, activeTab]);
 
@@ -465,22 +465,24 @@ export default function App() {
               className="nav-toggle-btn"
               onClick={() => setSidebarOpen(prev => !prev)}
               type="button"
+              aria-label="Open Navigation Menu"
               title="Open Navigation"
             >
               {I.menu}
             </button>
-            <span className="nav-title">{tabTitles[activeTab]}</span>
             <div className="nav-brand-mobile">
               <span className="brand-icon-sm">⚡</span>
-              <span>OpsPilot</span>
+              <span className="brand-text-sm">OpsPilot</span>
             </div>
-            <span className="nav-pill">
-              <span className={`dot ${isCloudOnline || isOllamaOnline ? "green" : "amber"}`} />
-              {isCloudOnline ? "24/7 Cloud" : isOllamaOnline ? "Local Ollama" : "Connecting..."}
-            </span>
+            <span className="nav-title">• {tabTitles[activeTab]}</span>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div className="navbar-right">
+            <span className="nav-pill">
+              <span className={`dot ${isCloudOnline || isOllamaOnline ? "green" : "amber"}`} />
+              <span className="nav-pill-text">{isCloudOnline ? "24/7 Cloud" : isOllamaOnline ? "Local Ollama" : "Connecting..."}</span>
+            </span>
+
             {activeTab === "workspace" && turns.length > 0 && (
               <button className="clear-btn" onClick={startNewChat} type="button" title="New Conversation">
                 {I.plus} New
@@ -499,7 +501,7 @@ export default function App() {
         {/* ── AI Workspace View ── */}
         {activeTab === "workspace" && (
           <>
-            <div className="chat-scroll">
+            <div className="chat-scroll" ref={chatScrollRef}>
               <div className="chat-center">
                 {turns.length === 0 ? (
                   <div className="empty-hero">
@@ -575,7 +577,6 @@ export default function App() {
                     </div>
                   ))
                 )}
-                <div ref={bottomRef} />
               </div>
             </div>
 
