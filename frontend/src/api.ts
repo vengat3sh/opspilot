@@ -20,6 +20,8 @@ export interface ChatResponse {
   latency_ms: number;
   prompt_tokens: number | null;
   completion_tokens: number | null;
+  agent?: string;
+  citations?: string[];
 }
 
 export interface LLMStatus {
@@ -38,13 +40,124 @@ export interface StreamMeta {
   completion_tokens: number | null;
 }
 
-export async function sendChat(messages: ChatMessage[], provider?: Provider): Promise<ChatResponse> {
-  const { data } = await http.post<ChatResponse>("/api/chat", { messages, provider });
+export interface DashboardMetrics {
+  total_documents: number;
+  indexed_documents: number;
+  total_queries: number;
+  agent_executions: number;
+  pending_approvals: number;
+  open_tickets: number;
+  avg_latency_ms: number;
+  active_model: string;
+  token_consumption: number;
+  estimated_api_cost: string;
+  system_health: "healthy" | "degraded" | "offline";
+  recent_activity: Array<{ time: string; action: string; user: string; agent: string }>;
+}
+
+export interface DocumentItem {
+  id: string;
+  filename: string;
+  file_type: string;
+  size_bytes: number;
+  chunks_count: number;
+  indexed: boolean;
+  category: string;
+  uploaded_at: string;
+  preview: string;
+}
+
+export interface AgentItem {
+  id: string;
+  name: string;
+  role: string;
+  status: "idle" | "running" | "waiting_approval" | "error";
+  total_runs: number;
+  success_rate: number;
+  description: string;
+  permitted_tools: string[];
+}
+
+export interface ApprovalItem {
+  id: string;
+  action_type: string;
+  title: string;
+  details: string;
+  requested_by: string;
+  risk_level: "low" | "medium" | "high" | "critical";
+  status: "pending" | "approved" | "rejected" | "executed";
+  timestamp: string;
+}
+
+export interface TicketItem {
+  id: string;
+  title: string;
+  description: string;
+  priority: "low" | "medium" | "high" | "critical";
+  status: "open" | "investigating" | "resolved" | "closed";
+  assigned_agent: string;
+  created_at: string;
+  category: string;
+}
+
+// ── API Functions ──────────────────────────────────────────────────────────
+
+export async function sendChat(messages: ChatMessage[], provider?: Provider, agent?: string): Promise<ChatResponse> {
+  const { data } = await http.post<ChatResponse>("/api/chat", { messages, provider, agent });
   return data;
 }
 
 export async function getLLMStatus(): Promise<LLMStatus> {
   const { data } = await http.get<LLMStatus>("/api/llm/status");
+  return data;
+}
+
+export async function getDashboardMetrics(): Promise<DashboardMetrics> {
+  const { data } = await http.get<DashboardMetrics>("/api/analytics/dashboard");
+  return data;
+}
+
+export async function getDocuments(): Promise<DocumentItem[]> {
+  const { data } = await http.get<DocumentItem[]>("/api/documents");
+  return data;
+}
+
+export async function uploadDocument(filename: string, content: string, category: string): Promise<DocumentItem> {
+  const { data } = await http.post<DocumentItem>("/api/documents/upload", null, {
+    params: { filename, content, category },
+  });
+  return data;
+}
+
+export async function deleteDocument(docId: string): Promise<void> {
+  await http.delete(`/api/documents/${docId}`);
+}
+
+export async function getAgents(): Promise<AgentItem[]> {
+  const { data } = await http.get<AgentItem[]>("/api/agents");
+  return data;
+}
+
+export async function getApprovals(): Promise<ApprovalItem[]> {
+  const { data } = await http.get<ApprovalItem[]>("/api/operations/approvals");
+  return data;
+}
+
+export async function submitApprovalAction(approvalId: string, action: "approve" | "reject"): Promise<ApprovalItem> {
+  const { data } = await http.post<ApprovalItem>(`/api/operations/approvals/${approvalId}/action`, {
+    approval_id: approvalId,
+    action,
+  });
+  return data;
+}
+
+export async function getTickets(): Promise<TicketItem[]> {
+  const { data } = await http.get<TicketItem[]>("/api/operations/tickets");
+  return data;
+}
+
+export async function createTicket(ticket: { title: string; description: string; priority: string; category: string }): Promise<TicketItem> {
+  const { data } = await http.post<TicketItem>("/api/operations/tickets", ticket);
   return data;
 }
 
@@ -82,7 +195,6 @@ export function streamChat(
         const { done, value } = await reader.read();
         if (done) break;
         buf += decoder.decode(value, { stream: true });
-        // SSE frames are separated by "\n\n"
         const frames = buf.split("\n\n");
         buf = frames.pop() ?? "";
         for (const frame of frames) {
@@ -135,4 +247,3 @@ export function errorMessage(err: unknown): string {
   }
   return err instanceof Error ? err.message : "Unknown error";
 }
-

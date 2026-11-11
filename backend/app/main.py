@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
-from .routers import chat
+from .routers import chat, operations
 
 settings = get_settings()
 logging.basicConfig(
@@ -22,6 +22,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(chat.router)
+app.include_router(operations.router)
 
 
 @app.get("/health")
