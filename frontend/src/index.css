@@ -813,8 +813,6 @@ html, body, #root {
     z-index: 35;
   }
 
-  .chat-navbar { padding: 0 12px; }
-
   .chat-scroll {
     padding: 16px 10px calc(var(--input-area-h) + 20px);
   }
