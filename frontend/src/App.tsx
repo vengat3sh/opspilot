@@ -77,11 +77,15 @@ function AuthGate({ onAuthenticated }: { onAuthenticated: (user: AuthUser) => vo
   }
   async function submitUserSignup(e: React.FormEvent) {
     e.preventDefault(); setErr(null);
+    if (!form.full_name.trim()) { setErr("Full name is required"); return; }
+    if (form.password.length < 8) { setErr("Password must be at least 8 characters"); return; }
     if (form.password !== form.confirm_password) { setErr("Passwords do not match"); return; }
-    if (!form.terms) { setErr("You must accept the terms"); return; }
+    if (!form.terms) { setErr("You must accept the terms to create an account"); return; }
     setLoading(true);
-    try { const res = await userRegister({ full_name: form.full_name, email: form.email, password: form.password, confirm_password: form.confirm_password, terms_accepted: true }); onAuthenticated(res.user); }
-    catch (e) { setErr(errorMessage(e)); } finally { setLoading(false); }
+    try {
+      const res = await userRegister({ full_name: form.full_name.trim(), email: form.email, password: form.password, confirm_password: form.confirm_password, terms_accepted: true });
+      onAuthenticated(res.user);
+    } catch (e) { setErr(errorMessage(e)); } finally { setLoading(false); }
   }
 
   return (

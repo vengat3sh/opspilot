@@ -388,10 +388,20 @@ export function streamChat(
 
 export function errorMessage(err: unknown): string {
   if (err instanceof AxiosError) {
+    const status = err.response?.status;
     const detail = err.response?.data?.detail;
-    if (typeof detail === "string") return detail;
-    if (err.code === "ERR_NETWORK") return "Cannot reach the backend API.";
-    return err.message;
+    if (typeof detail === "string" && detail.trim()) return detail;
+    if (Array.isArray(detail) && detail.length) {
+      const first = detail[0];
+      if (first && typeof first.msg === "string") return first.msg;
+    }
+    if (status === 409) return "An account with this email already exists.";
+    if (status === 401) return "Invalid email or password.";
+    if (status === 403) return "You do not have permission to perform this action.";
+    if (status === 422) return "Please check your input and try again.";
+    if (status === 500) return "Something went wrong on the server. Please try again.";
+    if (err.code === "ERR_NETWORK") return "Cannot reach the backend API. Please check your connection and try again.";
+    return "Request failed. Please try again.";
   }
   return err instanceof Error ? err.message : "Unknown error";
 }

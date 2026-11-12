@@ -62,7 +62,7 @@ def create_user(db: Session, full_name: str, email: str, password: str, verified
     norm = normalize_email(email)
     existing = db.execute(select(User).where(User.normalized_email == norm)).scalar_one_or_none()
     if existing:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="An account with this email already exists")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account with this email already exists")
     user = User(full_name=full_name.strip(), email=email.strip(), normalized_email=norm, password_hash=hash_password(password), is_verified=verified, is_active=True)
     db.add(user)
     db.commit()
