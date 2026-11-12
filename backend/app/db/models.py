@@ -42,7 +42,11 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     profile: Mapped["UserProfile | None"] = relationship(back_populates="user", uselist=False, cascade="all, delete-orphan")
-    user_roles: Mapped[list["UserRole"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    user_roles: Mapped[list["UserRole"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        foreign_keys="UserRole.user_id",
+    )
     sessions: Mapped[list["UserSession"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     oauth_accounts: Mapped[list["OAuthAccount"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     email_tokens: Mapped[list["EmailVerificationToken"]] = relationship(back_populates="user", cascade="all, delete-orphan")
@@ -72,7 +76,7 @@ class UserRole(Base, UUIDPrimaryKeyMixin):
 
     user: Mapped[User] = relationship(back_populates="user_roles", foreign_keys=[user_id])
     role: Mapped[Role] = relationship(back_populates="user_roles")
-    assigned_by_user: Mapped[User | None] = relationship(foreign_keys=[assigned_by])
+    assigned_by_user: Mapped[User | None] = relationship("User", foreign_keys=[assigned_by])
 
 
 class RolePermission(Base, UUIDPrimaryKeyMixin):
