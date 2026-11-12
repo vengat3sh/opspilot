@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  createProject,
+  errorMessage,
   getApprovals,
   getDashboardMetrics,
   getDeployments,
@@ -94,6 +96,25 @@ export default function DeveloperCommandCenter({
   const envsQ = useQuery({ queryKey: ["environments"], queryFn: () => getEnvironments(), staleTime: 30_000 });
   const incidentsQ = useQuery({ queryKey: ["incidents"], queryFn: () => getIncidents(), staleTime: 20_000 });
   const approvalsQ = useQuery({ queryKey: ["approvals"], queryFn: getApprovals, staleTime: 15_000 });
+  const queryClient = useQueryClient();
+  const [connectName, setConnectName] = useState("");
+  const [connectUrl, setConnectUrl] = useState("");
+  const [connectBranch, setConnectBranch] = useState("main");
+  const [connectProvider, setConnectProvider] = useState("local");
+  const connectMutation = useMutation({
+    mutationFn: () => createProject({
+      name: connectName.trim(),
+      repo_provider: connectProvider,
+      repo_url: connectUrl.trim(),
+      default_branch: connectBranch.trim() || "main",
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-metrics"] });
+      setConnectName("");
+      setConnectUrl("");
+    },
+  });
 
   const projects = projectsQ.data || [];
   const deployments = deploymentsQ.data || [];
@@ -161,11 +182,16 @@ export default function DeveloperCommandCenter({
               <p className="muted" style={{ fontSize: 13, marginTop: 8 }}>GitHub App/OAuth integration is required for real connections. Credentials are never exposed to the frontend.</p>
             </div>
             <div className="stack">
-              <div className="field"><label>Provider</label><select className="select" defaultValue="github"><option value="github">GitHub</option><option disabled>GitLab (coming soon)</option><option disabled>Bitbucket (coming soon)</option></select></div>
-              <div className="field"><label>Repository URL</label><input className="input" placeholder="https://github.com/owner/repo" /></div>
-              <div className="field"><label>Default branch</label><input className="input" defaultValue="main" /></div>
-              <div className="field"><label>Project name</label><input className="input" placeholder="my-project" /></div>
-              <button className="btn btn-primary" type="button">Start connection</button>
+              <div className="field"><label>Provider</label><select className="select" value={connectProvider} onChange={e => setConnectProvider(e.target.value)}><option value="local">Local workspace</option><option value="github">GitHub</option><option disabled>GitLab (coming soon)</option><option disabled>Bitbucket (coming soon)</option></select></div>
+              <div className="field"><label>Repository URL</label><input className="input" placeholder="https://github.com/owner/repo" value={connectUrl} onChange={e => setConnectUrl(e.target.value)} /></div>
+              <div className="field"><label>Default branch</label><input className="input" value={connectBranch} onChange={e => setConnectBranch(e.target.value)} /></div>
+              <div className="field"><label>Project name</label><input className="input" placeholder="my-project" value={connectName} onChange={e => setConnectName(e.target.value)} /></div>
+              {connectMutation.isError && <div className="turn-notice turn-notice-warning">{errorMessage(connectMutation.error)}</div>}
+              {connectMutation.isSuccess && <div className="turn-notice turn-notice-info">Project registered. Set <code>PROJECT_WORKSPACE_ROOT</code> and index it to add repository context.</div>}
+              <button className="btn btn-primary" type="button" disabled={!connectName.trim() || connectMutation.isPending} onClick={() => connectMutation.mutate()}>
+                {connectMutation.isPending ? "Registering…" : "Register project"}
+              </button>
+              <p className="muted" style={{ fontSize: 12 }}>GitHub App/OAuth, clone, and provider metadata sync are not connected. Registration persists the project record only.</p>
             </div>
           </div>
         </Panel>

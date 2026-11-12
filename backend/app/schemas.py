@@ -213,30 +213,7 @@ class TicketCreateRequest(BaseModel):
     category: str = "IT Support"
 
 
-# ── OpsPilot 3.0 Project / Cloud / Deployment Schemas ───────────────────────
-
-class ProjectItem(BaseModel):
-    id: str
-    name: str
-    repo_provider: str
-    repo_url: str
-    default_branch: str
-    status: str
-    language: str
-    framework: str
-    last_synced: str
-    health: str
-    environments: int
-    open_prs: int
-    pending_changes: int
-
-
-class ProjectCreateRequest(BaseModel):
-    name: str
-    repo_provider: str = "github"
-    repo_url: str
-    default_branch: str = "main"
-
+# ── OpsPilot 3.0 Cloud / Deployment Schemas ─────────────────────────────────
 
 class EnvironmentItem(BaseModel):
     id: str
