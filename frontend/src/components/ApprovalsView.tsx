@@ -1,17 +1,11 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getApprovals, submitApprovalAction } from "../api";
 
 export default function ApprovalsView() {
   const queryClient = useQueryClient();
-
-  const { data: approvals = [], isLoading } = useQuery({
-    queryKey: ["approvals"],
-    queryFn: getApprovals,
-  });
-
+  const { data: approvals = [], isLoading, isError } = useQuery({ queryKey: ["approvals"], queryFn: getApprovals });
   const actionMutation = useMutation({
-    mutationFn: ({ id, action }: { id: string; action: "approve" | "reject" }) =>
-      submitApprovalAction(id, action),
+    mutationFn: ({ id, action }: { id: string; action: "approve" | "reject" }) => submitApprovalAction(id, action),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["approvals"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-metrics"] });
@@ -20,81 +14,44 @@ export default function ApprovalsView() {
 
   const pending = approvals.filter(a => a.status === "pending");
   const history = approvals.filter(a => a.status !== "pending");
-
-  const riskClasses: Record<string, string> = {
-    critical: "risk-critical",
-    high: "risk-high",
-    medium: "risk-medium",
-    low: "risk-low",
-  };
+  const riskBadge = (level: string) => level === "critical" || level === "high" ? "badge-error" : level === "medium" ? "badge-warning" : "badge-info";
 
   return (
     <div className="view-container">
-      {/* Header */}
-      <div className="view-header">
+      <div className="page-header">
         <div>
-          <h2 className="view-title">Human-in-the-Loop Approval Center</h2>
-          <p className="view-subtitle">Guarding consequential actions: security boundaries, infrastructure scaling & tool calls</p>
+          <h1 className="page-title">Approvals</h1>
+          <p className="page-subtitle">Human-in-the-loop review for consequential and high-risk actions</p>
         </div>
-        <span className="health-badge healthy">
-          🛡️ Zero Unauthorized Execution
-        </span>
+        <span className="badge badge-info">🛡️ Zero unauthorized execution</span>
       </div>
 
-      {isLoading ? (
-        <div style={{ padding: "30px", textAlign: "center", color: "#94a3b8" }}>Loading pending approvals...</div>
-      ) : (
+      {isLoading ? <div className="muted">Loading approvals…</div> : isError ? <div className="empty-state">Unable to load approvals.</div> : (
         <>
-          {/* Pending Queue */}
-          <div style={{ marginBottom: 28 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-              <span>Pending Action Requests</span>
-              <span className="count-badge">{pending.length}</span>
-            </h3>
-
-            {pending.length === 0 ? (
-              <div className="empty-state">✅ All queued actions have been reviewed. No pending approvals.</div>
-            ) : (
-              <div className="approval-list">
+          <div style={{ marginBottom: 20 }}>
+            <div className="row" style={{ marginBottom: 12 }}><h2 className="section-title" style={{ margin: 0 }}>Pending requests</h2><span className="badge badge-warning">{pending.length}</span></div>
+            {pending.length === 0 ? <div className="empty-state">All queued actions have been reviewed. No pending approvals.</div> : (
+              <div className="grid">
                 {pending.map(item => (
-                  <div key={item.id} className="approval-card">
-                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
-                      <div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                          <span className={`risk-badge ${riskClasses[item.risk_level] || ""}`}>
-                            {item.risk_level.toUpperCase()} RISK
-                          </span>
-                          <span className="approval-title">{item.title}</span>
+                  <div key={item.id} className="card card-pad">
+                    <div className="row-between" style={{ alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div className="row" style={{ gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
+                          <span className={`badge ${riskBadge(item.risk_level)}`}>{item.risk_level.toUpperCase()} RISK</span>
+                          <strong style={{ fontSize: 16 }}>{item.title}</strong>
                         </div>
-                        <p className="approval-details">{item.details}</p>
+                        <p className="muted" style={{ fontSize: 14 }}>{item.details}</p>
                       </div>
+                      <span className="badge badge-warning">Pending</span>
                     </div>
-
-                    <div className="approval-footer">
-                      <div className="approval-meta">
-                        <span>👤 Requested by: <strong>{item.requested_by}</strong></span>
-                        <span>🕒 {item.timestamp}</span>
-                        <span className="font-mono">action: {item.action_type}</span>
-                      </div>
-
-                      <div className="approval-btn-group">
-                        <button
-                          className="reject-btn"
-                          disabled={actionMutation.isPending}
-                          onClick={() => actionMutation.mutate({ id: item.id, action: "reject" })}
-                          type="button"
-                        >
-                          ✕ Reject
-                        </button>
-                        <button
-                          className="approve-btn"
-                          disabled={actionMutation.isPending}
-                          onClick={() => actionMutation.mutate({ id: item.id, action: "approve" })}
-                          type="button"
-                        >
-                          ✓ Approve & Execute
-                        </button>
-                      </div>
+                    <div className="row" style={{ gap: 8, flexWrap: "wrap", marginTop: 12, fontSize: 12 }}>
+                      <span className="badge badge-neutral">👤 {item.requested_by}</span>
+                      <span className="badge badge-neutral">🕒 {item.timestamp}</span>
+                      <span className="badge badge-neutral" style={{ fontFamily: "JetBrains Mono, monospace" }}>{item.action_type}</span>
+                    </div>
+                    <div className="row" style={{ gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+                      <button className="btn btn-danger btn-sm" disabled={actionMutation.isPending} onClick={() => actionMutation.mutate({ id: item.id, action: "reject" })} type="button">Reject</button>
+                      <button className="btn btn-primary btn-sm" disabled={actionMutation.isPending} onClick={() => actionMutation.mutate({ id: item.id, action: "approve" })} type="button">Approve & execute</button>
                     </div>
                   </div>
                 ))}
@@ -102,28 +59,20 @@ export default function ApprovalsView() {
             )}
           </div>
 
-          {/* Historical Review Log */}
           {history.length > 0 && (
             <div>
-              <h3 style={{ fontSize: 14, fontWeight: 700, color: "#64748b", marginBottom: 10 }}>
-                Recent Decisions Audit Log
-              </h3>
-              <div className="approval-list">
+              <h2 className="section-title">Decision history</h2>
+              <div className="grid">
                 {history.map(item => (
-                  <div key={item.id} className="approval-card reviewed">
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <span className={`status-pill ${item.status === "approved" ? "active" : "danger"}`}>
-                            {item.status.toUpperCase()}
-                          </span>
-                          <span style={{ fontWeight: 600, fontSize: 13.5 }}>{item.title}</span>
-                        </div>
-                        <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
-                          Requested by {item.requested_by} • {item.timestamp}
-                        </div>
+                  <div key={item.id} className="card card-pad row-between" style={{ flexWrap: "wrap", gap: 12 }}>
+                    <div>
+                      <div className="row" style={{ gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
+                        <span className={`badge ${item.status === "approved" || item.status === "executed" ? "badge-success" : "badge-error"}`}>{item.status.toUpperCase()}</span>
+                        <strong>{item.title}</strong>
                       </div>
+                      <div className="muted" style={{ fontSize: 13 }}>Requested by {item.requested_by} • {item.timestamp}</div>
                     </div>
+                    <span className={`badge ${riskBadge(item.risk_level)}`}>{item.risk_level}</span>
                   </div>
                 ))}
               </div>

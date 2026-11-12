@@ -2,90 +2,50 @@ import { useQuery } from "@tanstack/react-query";
 import { getAgents } from "../api";
 
 export default function AgentsView({ onSelectAgent }: { onSelectAgent?: (agentId: string) => void }) {
-  const { data: agents = [], isLoading } = useQuery({
-    queryKey: ["agents"],
-    queryFn: getAgents,
-  });
-
-  const agentIcons: Record<string, string> = {
-    "agent-knowledge": "🧠",
-    "agent-research": "🔬",
-    "agent-operations": "⚡",
-    "agent-analytics": "📈",
-  };
+  const { data: agents = [], isLoading, isError } = useQuery({ queryKey: ["agents"], queryFn: getAgents });
+  const agentIcons: Record<string, string> = { "agent-knowledge": "🧠", "agent-research": "🔬", "agent-operations": "⚡", "agent-analytics": "📈" };
 
   return (
     <div className="view-container">
-      {/* Header */}
-      <div className="view-header">
+      <div className="page-header">
         <div>
-          <h2 className="view-title">Multi-Agent AI Orchestrator</h2>
-          <p className="view-subtitle">Stateful LangGraph agent pipelines with role-based authority & safety bounds</p>
+          <h1 className="page-title">AI Agents</h1>
+          <p className="page-subtitle">Stateful agent workflows with role-based authority and safety bounds</p>
         </div>
-        <span className="health-badge healthy">
-          <span className="dot green" /> 4 Agents Operational
-        </span>
+        <span className="badge badge-success">● {agents.length || 4} agents available</span>
       </div>
 
-      {isLoading ? (
-        <div style={{ padding: "30px", textAlign: "center", color: "#94a3b8" }}>Loading agent swarm...</div>
-      ) : (
-        <div className="agent-grid">
+      {isLoading ? <div className="muted">Loading agents…</div> : isError ? <div className="empty-state">Unable to load agents.</div> : (
+        <div className="grid grid-2">
           {agents.map(ag => {
             const icon = agentIcons[ag.id] || "🤖";
             const isWaiting = ag.status === "waiting_approval";
-
             return (
-              <div key={ag.id} className="agent-card">
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <div className="agent-avatar">{icon}</div>
+              <div key={ag.id} className="card card-pad">
+                <div className="row-between" style={{ marginBottom: 12, alignItems: "flex-start" }}>
+                  <div className="row" style={{ gap: 12 }}>
+                    <div style={{ width: 44, height: 44, borderRadius: 12, display: "grid", placeItems: "center", background: "linear-gradient(135deg,var(--indigo),var(--violet))", color: "#fff", fontSize: 20 }}>{icon}</div>
                     <div>
-                      <h3 className="agent-name">{ag.name}</h3>
-                      <div className="agent-role">{ag.role}</div>
+                      <h3 style={{ fontSize: 17, fontWeight: 700 }}>{ag.name}</h3>
+                      <div className="muted" style={{ fontSize: 13 }}>{ag.role}</div>
                     </div>
                   </div>
-                  <span className={`status-pill ${isWaiting ? "warning" : "active"}`}>
-                    <span className={`dot ${isWaiting ? "amber" : "green"}`} />
-                    {isWaiting ? "Awaiting Approval" : "Ready / Idle"}
-                  </span>
+                  <span className={`badge ${isWaiting ? "badge-warning" : ag.status === "error" ? "badge-error" : "badge-success"}`}>{isWaiting ? "Awaiting approval" : ag.status === "error" ? "Error" : ag.status}</span>
                 </div>
 
-                <p className="agent-desc">{ag.description}</p>
+                <p className="muted" style={{ marginBottom: 14, fontSize: 14 }}>{ag.description}</p>
 
-                {/* Permitted Tools */}
                 <div style={{ marginBottom: 14 }}>
-                  <div className="tool-header">Permitted MCP Tools:</div>
-                  <div className="tool-chips">
-                    {ag.permitted_tools.map(tool => (
-                      <span key={tool} className="tool-chip">
-                        ⚙️ {tool}
-                      </span>
-                    ))}
-                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-muted)", marginBottom: 8, textTransform: "uppercase", letterSpacing: ".04em" }}>Permitted tools</div>
+                  <div className="chip-wrap">{ag.permitted_tools.map(tool => <span key={tool} className="tool-chip">⚙️ {tool}</span>)}</div>
                 </div>
 
-                {/* Performance stats */}
-                <div className="agent-stats">
-                  <div>
-                    <span className="stat-label">Executions</span>
-                    <span className="stat-val">{ag.total_runs}</span>
-                  </div>
-                  <div>
-                    <span className="stat-label">Success Rate</span>
-                    <span className="stat-val text-emerald">{ag.success_rate}%</span>
-                  </div>
+                <div className="grid grid-2" style={{ gap: 10, marginBottom: 14 }}>
+                  <div className="card" style={{ padding: 12, boxShadow: "none", background: "var(--surface-2)" }}><div className="metric-label">Executions</div><div style={{ fontWeight: 800, fontSize: 20 }}>{ag.total_runs}</div></div>
+                  <div className="card" style={{ padding: 12, boxShadow: "none", background: "var(--surface-2)" }}><div className="metric-label">Success rate</div><div style={{ fontWeight: 800, fontSize: 20, color: "var(--success)" }}>{ag.success_rate}%</div></div>
                 </div>
 
-                {onSelectAgent && (
-                  <button
-                    className="agent-invoke-btn"
-                    onClick={() => onSelectAgent(ag.id)}
-                    type="button"
-                  >
-                    Chat with {ag.name} →
-                  </button>
-                )}
+                {onSelectAgent && <button className="btn btn-secondary" onClick={() => onSelectAgent(ag.id)} type="button">Open in AI Engineer →</button>}
               </div>
             );
           })}

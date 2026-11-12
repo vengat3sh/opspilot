@@ -20,30 +20,6 @@ const QUICK_TASKS = [
   { icon: "⚡", label: "Optimize API performance", prompt: "Review backend performance bottlenecks and propose targeted optimizations with code examples and rollback-safe steps." },
 ];
 
-const I = {
-  send: (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="22" y1="2" x2="11" y2="13" />
-      <polygon points="22 2 15 22 11 13 2 9 22 2" />
-    </svg>
-  ),
-  bot: (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="11" width="18" height="10" rx="2" />
-      <circle cx="8.5" cy="16" r="1.5" fill="currentColor" stroke="none" />
-      <circle cx="15.5" cy="16" r="1.5" fill="currentColor" stroke="none" />
-      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-      <line x1="12" y1="2" x2="12" y2="4" />
-    </svg>
-  ),
-  user: (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
-      <circle cx="12" cy="7" r="4" />
-    </svg>
-  ),
-};
-
 function deriveStages(turns: Turn[], isPending: boolean) {
   const hasUser = turns.some(t => t.role === "user");
   const lastAssistant = [...turns].reverse().find(t => t.role === "assistant");
@@ -54,8 +30,8 @@ function deriveStages(turns: Turn[], isPending: boolean) {
     { key: "plan", label: "Execution plan", detail: hasUser ? "Plan drafted with risks and dependencies" : "No active task" },
     { key: "inspect", label: "Files inspected", detail: hasUser ? "Relevant modules and config identified" : "—" },
     { key: "changes", label: "Code changes", detail: active ? "Generating targeted implementation guidance" : done ? "Proposed changes prepared for review" : "Pending" },
-    { key: "verify", label: "Tests & verification", detail: done ? "Verification checklist ready (run in sandbox)" : active ? "Preparing checks" : "Pending" },
-    { key: "review", label: "Review & approval", detail: done ? "Awaiting user approval for consequential actions" : "Pending" },
+    { key: "verify", label: "Tests & verification", detail: done ? "Verification checklist ready" : active ? "Preparing checks" : "Pending" },
+    { key: "review", label: "Review & approval", detail: done ? "Awaiting approval for consequential actions" : "Pending" },
   ];
   return stages.map((s, i) => {
     let status: "pending" | "active" | "done" = "pending";
@@ -68,51 +44,30 @@ function deriveStages(turns: Turn[], isPending: boolean) {
 }
 
 export default function AIEngineerView({
-  turns,
-  input,
-  setInput,
-  isPending,
-  onSend,
-  onQuickPrompt,
-  onCancel,
+  turns, input, setInput, isPending, onSend, onQuickPrompt, onCancel,
 }: {
-  turns: Turn[];
-  input: string;
-  setInput: (v: string) => void;
-  isPending: boolean;
-  onSend: (text: string) => void;
-  onQuickPrompt: (text: string) => void;
-  onCancel?: () => void;
+  turns: Turn[]; input: string; setInput: (v: string) => void; isPending: boolean; onSend: (text: string) => void; onQuickPrompt: (text: string) => void; onCancel?: () => void;
 }) {
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [tab, setTab] = useState<"plan" | "diff" | "checks">("plan");
 
-  useEffect(() => {
-    if (chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
-  }, [turns]);
-
-  useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, 140) + "px";
-  }, [input]);
+  useEffect(() => { if (chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight; }, [turns]);
+  useEffect(() => { const el = textareaRef.current; if (!el) return; el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 140) + "px"; }, [input]);
 
   const stages = useMemo(() => deriveStages(turns, isPending), [turns, isPending]);
   const lastUser = [...turns].reverse().find(t => t.role === "user")?.content || "";
   const lastAssistant = [...turns].reverse().find(t => t.role === "assistant");
   const filesInspected = ["backend/app/main.py", "backend/app/routers/chat.py", "frontend/src/App.tsx", "frontend/src/api.ts", "docker-compose.yml"];
-  const filesChanged = lastAssistant && !lastAssistant.streaming ? ["(proposed) backend/app/auth.py", "(proposed) frontend/src/components/Login.tsx", "(proposed) backend/app/config.py"] : [];
+  const filesChanged = lastAssistant && !lastAssistant.streaming ? ["(proposed) targeted backend/frontend changes"] : [];
   const checks = [
     { name: "Static analysis / lint", status: isPending ? "running" : lastAssistant ? "ready" : "pending" },
     { name: "Unit tests (pytest)", status: isPending ? "queued" : lastAssistant ? "ready" : "pending" },
     { name: "Frontend build (vite)", status: isPending ? "queued" : lastAssistant ? "ready" : "pending" },
-    { name: "Security scan (deps/config)", status: isPending ? "queued" : lastAssistant ? "ready" : "pending" },
+    { name: "Security scan", status: isPending ? "queued" : lastAssistant ? "ready" : "pending" },
   ];
-
   const diffPreview = lastAssistant?.content
-    ? `--- a/backend/app/example.py\n+++ b/backend/app/example.py\n@@ Proposed changes (review required) @@\n+ # AI-generated patch preview will appear here after sandbox execution\n+ # Current response includes implementation guidance and code snippets\n`
+    ? `--- a/backend/app/example.py\n+++ b/backend/app/example.py\n@@ Proposed changes (review required) @@\n+ AI-generated patch preview appears here after sandbox execution.\n`
     : `No active diff yet.\n\nStart a task to generate a plan, proposed changes, and a unified diff for review.`;
 
   return (
@@ -120,19 +75,19 @@ export default function AIEngineerView({
       <section className="engineer-main">
         <div className="engineer-hero-bar">
           <div>
-            <div className="engineer-kicker">OpsPilot AI Engineer</div>
-            <h2 className="engineer-heading">Autonomous software engineering workspace</h2>
-            <p className="engineer-subheading">Plan, inspect, modify, test, and review changes with human approval gates for consequential actions.</p>
+            <div className="badge badge-info" style={{ marginBottom: 8 }}>OpsPilot AI Engineer</div>
+            <h2 style={{ fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em", marginBottom: 6 }}>Autonomous engineering workspace</h2>
+            <p className="muted" style={{ maxWidth: 720 }}>Plan, inspect, modify, test, and review changes with human approval gates for consequential actions.</p>
           </div>
-          <div className="engineer-context-card">
-            <div className="context-row"><span>Project</span><strong>opspilot (connected)</strong></div>
-            <div className="context-row"><span>Branch</span><strong>main</strong></div>
-            <div className="context-row"><span>Sandbox</span><strong>Policy: approval required</strong></div>
+          <div className="card card-pad" style={{ minWidth: 260, padding: 14 }}>
+            <div className="context-row"><span className="muted">Project</span><strong>opspilot</strong></div>
+            <div className="context-row" style={{ marginTop: 8 }}><span className="muted">Branch</span><strong>main</strong></div>
+            <div className="context-row" style={{ marginTop: 8 }}><span className="muted">Policy</span><span className="badge badge-warning">Approval required</span></div>
           </div>
         </div>
 
         <div className="engineer-chat-shell">
-          <div className="engineer-chat-scroll" ref={chatScrollRef}>
+          <div className="engineer-chat-scroll" ref={chatScrollRef} aria-live="polite">
             {turns.length === 0 ? (
               <div className="engineer-empty">
                 <div className="hero-avatar" style={{ marginBottom: 16 }}>🧠</div>
@@ -149,13 +104,13 @@ export default function AIEngineerView({
             ) : (
               turns.map((t, idx) => (
                 <div key={idx} className={`turn-row ${t.role === "user" ? "user" : "bot"}`}>
-                  <div className={`turn-avatar ${t.role === "user" ? "user" : "bot"}`}>{t.role === "user" ? I.user : I.bot}</div>
+                  <div className={`turn-avatar ${t.role === "user" ? "user" : "bot"}`}>{t.role === "user" ? "U" : "AI"}</div>
                   <div className="turn-bubble">
                     {t.role === "user" ? (
                       <div className="bubble-user">{t.content}</div>
                     ) : t.error ? (
-                      <div className="bubble-assistant" style={{ borderColor: "#fca5a5", background: "#fef2f2" }}>
-                        <span style={{ color: "#dc2626", fontWeight: 600, whiteSpace: "pre-wrap" }}>⚠️ {t.content}</span>
+                      <div className="bubble-assistant" style={{ borderColor: "var(--error-border)", background: "var(--error-bg)" }}>
+                        <span style={{ color: "var(--error)", fontWeight: 600, whiteSpace: "pre-wrap" }}>⚠️ {t.content}</span>
                       </div>
                     ) : (
                       <div className="bubble-assistant">
@@ -166,12 +121,10 @@ export default function AIEngineerView({
                             code({ inline, className, children, ...props }: any) {
                               const match = /language-(\w+)/.exec(className || "");
                               return !inline && match ? (
-                                <SyntaxHighlighter style={oneDark} language={match[1]} PreTag="div" customStyle={{ borderRadius: 10, fontSize: "0.8rem", margin: "10px 0" }} {...props}>
+                                <SyntaxHighlighter style={oneDark} language={match[1]} PreTag="div" customStyle={{ borderRadius: 10, fontSize: "0.82rem", margin: "10px 0" }} {...props}>
                                   {String(children).replace(/\n$/, "")}
                                 </SyntaxHighlighter>
-                              ) : (
-                                <code {...props}>{children}</code>
-                              );
+                              ) : <code className={className} {...props}>{children}</code>;
                             },
                           }}
                         >
@@ -195,9 +148,9 @@ export default function AIEngineerView({
 
           <div className="engineer-input-wrap">
             {isPending && (
-              <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+              <div className="row-between" style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8 }}>
                 <span>⏳ Generating response…</span>
-                {onCancel && <button type="button" className="dcc-btn dcc-btn-ghost" style={{ padding: "4px 10px", fontSize: 12 }} onClick={onCancel}>Cancel</button>}
+                {onCancel && <button type="button" className="btn btn-ghost btn-sm" onClick={onCancel}>Cancel</button>}
               </div>
             )}
             <div className="chat-input-box">
@@ -206,32 +159,26 @@ export default function AIEngineerView({
                 className="chat-textarea"
                 value={input}
                 onChange={e => setInput(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    if (!isPending && input.trim()) onSend(input);
-                  }
-                }}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (!isPending && input.trim()) onSend(input); } }}
                 placeholder="Instruct the AI Engineer (e.g. “Fix login issue”, “Add Docker support”, “Review latest changes”)…"
                 rows={1}
+                aria-label="Message AI Engineer"
               />
-              <button className="send-button" type="button" onClick={() => onSend(input)} disabled={isPending || !input.trim()} title="Send task">
-                {I.send}
-              </button>
+              <button className="send-button" type="button" onClick={() => onSend(input)} disabled={isPending || !input.trim()} title="Send task" aria-label="Send">➤</button>
             </div>
-            <div className="input-disclaimer">Plans and patches are proposals until reviewed. Commands, Git pushes, and deployments require explicit approval.</div>
+            <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>Plans and patches are proposals until reviewed. Git pushes, deployments, and destructive operations require explicit approval.</div>
           </div>
         </div>
       </section>
 
       <aside className="engineer-side">
         <div className="engineer-panel">
-          <div className="panel-title"><span>Execution stages</span><span className={`status-pill ${isPending ? "warning" : "active"}`}>{isPending ? "Running" : "Ready"}</span></div>
+          <div className="row-between" style={{ marginBottom: 12 }}><span className="section-title" style={{ margin: 0 }}>Execution stages</span><span className={`badge ${isPending ? "badge-warning" : "badge-success"}`}>{isPending ? "Running" : "Ready"}</span></div>
           <div className="stage-list">
             {stages.map(s => (
-              <div key={s.key} className={`stage-item ${s.status}`}>
-                <div className="stage-dot" />
-                <div>
+              <div key={s.key} className="stage-item">
+                <span className={`badge ${s.status === "done" ? "badge-success" : s.status === "active" ? "badge-info" : "badge-neutral"}`} style={{ minWidth: 24, justifyContent: "center" }}>{s.status === "done" ? "✓" : s.status === "active" ? "…" : "•"}</span>
+                <div style={{ flex: 1 }}>
                   <div className="stage-label">{s.label}</div>
                   <div className="stage-detail">{s.detail}</div>
                 </div>
@@ -241,45 +188,43 @@ export default function AIEngineerView({
         </div>
 
         <div className="engineer-panel">
-          <div className="panel-title">Task context</div>
+          <div className="section-title">Task context</div>
           <div className="context-block"><div className="context-label">Latest request</div><div className="context-value">{lastUser || "No task submitted yet."}</div></div>
           <div className="context-block"><div className="context-label">Files inspected</div><div className="chip-wrap">{filesInspected.map(f => <span key={f} className="tool-chip">{f}</span>)}</div></div>
-          <div className="context-block"><div className="context-label">Proposed changed files</div><div className="chip-wrap">{filesChanged.length ? filesChanged.map(f => <span key={f} className="tool-chip">{f}</span>) : <span className="context-muted">None yet</span>}</div></div>
+          <div className="context-block"><div className="context-label">Proposed changes</div><div className="chip-wrap">{filesChanged.length ? filesChanged.map(f => <span key={f} className="tool-chip">{f}</span>) : <span className="context-muted">None yet</span>}</div></div>
         </div>
 
         <div className="engineer-panel">
-          <div className="engineer-tabs">
-            <button className={`engineer-tab ${tab === "plan" ? "active" : ""}`} onClick={() => setTab("plan")} type="button">Plan</button>
-            <button className={`engineer-tab ${tab === "checks" ? "active" : ""}`} onClick={() => setTab("checks")} type="button">Checks</button>
-            <button className={`engineer-tab ${tab === "diff" ? "active" : ""}`} onClick={() => setTab("diff")} type="button">Diff</button>
+          <div className="row" style={{ gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
+            {(["plan", "checks", "diff"] as const).map(t => (
+              <button key={t} className={`btn btn-sm ${tab === t ? "btn-primary" : "btn-secondary"}`} onClick={() => setTab(t)} type="button" style={{ textTransform: "capitalize" }}>{t}</button>
+            ))}
           </div>
           {tab === "plan" && (
             <div className="plan-box">
-              <ol>
-                <li>Understand request and identify target project scope.</li>
+              <ol style={{ paddingLeft: 18, display: "grid", gap: 6, fontSize: 13 }}>
+                <li>Understand request and identify target scope.</li>
                 <li>Inspect relevant files, dependencies, and architecture.</li>
-                <li>Generate minimal, reviewable implementation plan and risks.</li>
+                <li>Generate minimal, reviewable implementation plan.</li>
                 <li>Apply changes in isolated sandbox branch (on approval).</li>
                 <li>Run lint/tests/build and produce diff + review report.</li>
                 <li>Request approval for commit/PR/deploy actions.</li>
               </ol>
-              <div className="approval-note">⚠️ Consequential actions (push, merge, infra, deploy, destructive ops) are blocked pending explicit approval.</div>
+              <div style={{ marginTop: 10, fontSize: 12 }} className="badge badge-warning">⚠️ Consequential actions require explicit approval.</div>
             </div>
           )}
           {tab === "checks" && (
             <div className="checks-list">
               {checks.map(c => (
-                <div key={c.name} className="check-row">
-                  <span>{c.name}</span>
-                  <span className={`check-status ${c.status}`}>{c.status}</span>
+                <div key={c.name} className="check-row card card-pad" style={{ padding: 10 }}>
+                  <span style={{ fontSize: 13 }}>{c.name}</span>
+                  <span className={`badge ${c.status === "ready" ? "badge-success" : c.status === "running" ? "badge-info" : "badge-neutral"}`}>{c.status}</span>
                 </div>
               ))}
-              <div className="context-muted" style={{ marginTop: 8 }}>Real command execution runs in the sandbox service once connected.</div>
+              <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Real command execution runs in the sandbox service when connected.</div>
             </div>
           )}
-          {tab === "diff" && (
-            <pre className="diff-box"><code>{diffPreview}</code></pre>
-          )}
+          {tab === "diff" && <pre className="diff-box" style={{ margin: 0, whiteSpace: "pre-wrap" }}><code>{diffPreview}</code></pre>}
         </div>
       </aside>
     </div>

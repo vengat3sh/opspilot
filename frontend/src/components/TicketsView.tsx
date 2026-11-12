@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getTickets, createTicket, type TicketItem } from "../api";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createTicket, getTickets, type TicketItem } from "../api";
 
 export default function TicketsView({ onInvestigate }: { onInvestigate?: (ticket: TicketItem) => void }) {
   const queryClient = useQueryClient();
@@ -10,138 +10,76 @@ export default function TicketsView({ onInvestigate }: { onInvestigate?: (ticket
   const [priority, setPriority] = useState<"low" | "medium" | "high" | "critical">("medium");
   const [category, setCategory] = useState("IT Support");
 
-  const { data: tickets = [], isLoading } = useQuery({
-    queryKey: ["tickets"],
-    queryFn: getTickets,
-  });
-
+  const { data: tickets = [], isLoading, isError } = useQuery({ queryKey: ["tickets"], queryFn: getTickets });
   const createMutation = useMutation({
     mutationFn: () => createTicket({ title, description, priority, category }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tickets"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-metrics"] });
-      setShowCreate(false);
-      setTitle("");
-      setDescription("");
+      setShowCreate(false); setTitle(""); setDescription("");
     },
   });
 
-  const priorityClasses: Record<string, string> = {
-    critical: "risk-critical",
-    high: "risk-high",
-    medium: "risk-medium",
-    low: "risk-low",
-  };
+  const priorityBadge = (p: string) => p === "critical" || p === "high" ? "badge-error" : p === "medium" ? "badge-warning" : "badge-info";
+  const statusBadge = (s: string) => s === "resolved" || s === "closed" ? "badge-success" : s === "investigating" ? "badge-info" : "badge-warning";
 
   return (
     <div className="view-container">
-      {/* Header */}
-      <div className="view-header">
+      <div className="page-header">
         <div>
-          <h2 className="view-title">IT Support & Incident Automation</h2>
-          <p className="view-subtitle">Autonomous incident triage, root cause investigation & ticketing workflow</p>
+          <h1 className="page-title">Tickets & Incidents</h1>
+          <p className="page-subtitle">Operational triage, investigation, and incident workflow tracking</p>
         </div>
-        <button className="primary-btn" onClick={() => setShowCreate(prev => !prev)} type="button">
-          {showCreate ? "✕ Close" : "+ Create Incident Ticket"}
-        </button>
+        <button className="btn btn-primary" onClick={() => setShowCreate(v => !v)} type="button">{showCreate ? "Close" : "+ Create ticket"}</button>
       </div>
 
-      {/* Create Ticket Modal / Form */}
       {showCreate && (
-        <div className="upload-box">
-          <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Open New Operational Ticket</h3>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 10 }}>
-            <div>
-              <label className="input-label">Incident / Problem Title</label>
-              <input
-                className="form-input"
-                value={title}
-                onChange={e => setTitle(e.target.value)}
-                placeholder="e.g. Laptop VPN connection timeout from Munich"
-              />
-            </div>
-            <div>
-              <label className="input-label">Department / Category</label>
-              <select className="form-input" value={category} onChange={e => setCategory(e.target.value)}>
-                <option value="IT Support">IT Support</option>
-                <option value="DevOps">DevOps</option>
-                <option value="HR">HR</option>
-                <option value="Finance">Finance</option>
-                <option value="Security">Security</option>
+        <div className="card card-pad" style={{ marginBottom: 16 }}>
+          <h3 className="section-title">Open new ticket</h3>
+          <div className="grid grid-3" style={{ marginBottom: 12 }}>
+            <div className="field"><label>Title</label><input className="input" value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. VPN connection timeout" /></div>
+            <div className="field"><label>Category</label>
+              <select className="select" value={category} onChange={e => setCategory(e.target.value)}>
+                <option value="IT Support">IT Support</option><option value="DevOps">DevOps</option><option value="HR">HR</option><option value="Finance">Finance</option><option value="Security">Security</option>
               </select>
             </div>
-            <div>
-              <label className="input-label">Priority</label>
-              <select className="form-input" value={priority} onChange={e => setPriority(e.target.value as any)}>
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="critical">Critical (P1)</option>
+            <div className="field"><label>Priority</label>
+              <select className="select" value={priority} onChange={e => setPriority(e.target.value as any)}>
+                <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical (P1)</option>
               </select>
             </div>
           </div>
-          <div style={{ marginBottom: 12 }}>
-            <label className="input-label">Detailed Symptoms / Error Trace</label>
-            <textarea
-              className="form-input"
-              rows={3}
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              placeholder="Describe what broke, steps to reproduce, or paste logs..."
-            />
-          </div>
-          <button
-            className="primary-btn"
-            disabled={!title.trim() || !description.trim() || createMutation.isPending}
-            onClick={() => createMutation.mutate()}
-            type="button"
-          >
-            {createMutation.isPending ? "Triaging..." : "Submit to Agent Orchestrator"}
+          <div className="field" style={{ marginBottom: 12 }}><label>Symptoms / details</label><textarea className="textarea" rows={3} value={description} onChange={e => setDescription(e.target.value)} placeholder="Describe what broke, steps to reproduce, or logs…" /></div>
+          <button className="btn btn-primary" disabled={!title.trim() || !description.trim() || createMutation.isPending} onClick={() => createMutation.mutate()} type="button">
+            {createMutation.isPending ? "Submitting…" : "Submit ticket"}
           </button>
         </div>
       )}
 
-      {/* Tickets List */}
-      {isLoading ? (
-        <div style={{ padding: "30px", textAlign: "center", color: "#94a3b8" }}>Loading tickets...</div>
-      ) : tickets.length === 0 ? (
-        <div className="empty-state">No active operational tickets.</div>
+      {isLoading ? <div className="muted">Loading tickets…</div> : isError ? <div className="empty-state">Unable to load tickets.</div> : tickets.length === 0 ? (
+        <div className="empty-state">No operational tickets found.</div>
       ) : (
-        <div className="ticket-list">
+        <div className="grid">
           {tickets.map(ticket => (
-            <div key={ticket.id} className="ticket-card">
-              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 6 }}>
-                <div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                    <span className="font-mono text-sub font-semibold" style={{ fontSize: 12 }}>{ticket.id}</span>
-                    <span className={`risk-badge ${priorityClasses[ticket.priority] || ""}`}>
-                      {ticket.priority.toUpperCase()}
-                    </span>
-                    <span className="ticket-title">{ticket.title}</span>
+            <div key={ticket.id} className="card card-pad">
+              <div className="row-between" style={{ alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div className="row" style={{ gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
+                    <span className="badge badge-neutral" style={{ fontFamily: "JetBrains Mono, monospace" }}>{ticket.id}</span>
+                    <span className={`badge ${priorityBadge(ticket.priority)}`}>{ticket.priority.toUpperCase()}</span>
+                    <strong style={{ fontSize: 16 }}>{ticket.title}</strong>
                   </div>
-                  <p className="ticket-desc">{ticket.description}</p>
+                  <p className="muted" style={{ fontSize: 14 }}>{ticket.description}</p>
                 </div>
-                <span className={`status-pill ${ticket.status === "resolved" ? "active" : "warning"}`}>
-                  {ticket.status.toUpperCase()}
-                </span>
+                <span className={`badge ${statusBadge(ticket.status)}`}>{ticket.status.toUpperCase()}</span>
               </div>
-
-              <div className="ticket-footer">
-                <div style={{ display: "flex", gap: 14, fontSize: 11.5, color: "#64748b" }}>
-                  <span>🤖 Assigned: <strong>{ticket.assigned_agent}</strong></span>
-                  <span>📁 {ticket.category}</span>
-                  <span>📅 {ticket.created_at}</span>
+              <div className="row-between" style={{ marginTop: 14, flexWrap: "wrap", gap: 10 }}>
+                <div className="row" style={{ gap: 8, flexWrap: "wrap", fontSize: 12 }}>
+                  <span className="badge badge-neutral">🤖 {ticket.assigned_agent}</span>
+                  <span className="badge badge-neutral">📁 {ticket.category}</span>
+                  <span className="badge badge-neutral">📅 {ticket.created_at}</span>
                 </div>
-
-                {onInvestigate && (
-                  <button
-                    className="secondary-btn-sm"
-                    onClick={() => onInvestigate(ticket)}
-                    type="button"
-                  >
-                    Investigate with Agent →
-                  </button>
-                )}
+                {onInvestigate && <button className="btn btn-secondary btn-sm" onClick={() => onInvestigate(ticket)} type="button">Investigate with AI →</button>}
               </div>
             </div>
           ))}
