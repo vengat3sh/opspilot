@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import json
 from typing import Annotated
 
@@ -46,34 +46,32 @@ async def chat(req: ChatRequest, settings: SettingsDep) -> ChatResponse:
 
 @router.post("/chat/stream")
 async def chat_stream(req: ChatRequest, settings: SettingsDep) -> StreamingResponse:
-    """Server-Sent Events endpoint — streams tokens as they're generated."""
+    """Server-Sent Events endpoint that streams tokens as they are generated."""
 
     async def event_generator():
         try:
             async for token in llm.stream_chat(settings, req.messages, req.provider, req.agent):
-                # Control tokens (__done__, __error__) are already JSON-encoded
-                # dicts from llm.py — pass them through raw so the frontend
-                # receives a JSON object, not a double-encoded string.
+                # Control tokens (__done__, __error__) are JSON-encoded dict strings from llm.py.
                 try:
                     parsed = json.loads(token)
                     if isinstance(parsed, dict):
                         yield f"data: {token}\n\n"
-                        await asyncio.sleep(0)
                         continue
                 except (json.JSONDecodeError, ValueError):
                     pass
-                # Regular text token — encode as a JSON string
                 yield f"data: {json.dumps(token)}\n\n"
-                await asyncio.sleep(0)  # yield control to event loop
         except llm.LLMError as exc:
             yield f"data: {json.dumps({'__error__': str(exc)})}\n\n"
+        except Exception:
+            yield f"data: {json.dumps({'__error__': 'Unexpected streaming error'})}\n\n"
 
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",  # disable nginx buffering
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
         },
     )
 

@@ -1,4 +1,4 @@
-"""LLM provider layer: local Ollama and any OpenAI-compatible cloud API."""
+﻿"""LLM provider layer: local Ollama and any OpenAI-compatible cloud API."""
 import json
 import logging
 import re
@@ -152,13 +152,13 @@ FREE_MODEL_FALLBACKS = [
 
 def _format_quota_error(detail: str = "") -> str:
     return (
-        "⚠️ FREE TOKEN LIMIT REACHED / RATE-LIMITED\n\n"
-        "🛡️ Zero-Charge Safety Guard: The cloud provider's free tier has temporarily reached its token or request limit. "
+        "âš ï¸ FREE TOKEN LIMIT REACHED / RATE-LIMITED\n\n"
+        "ðŸ›¡ï¸ Zero-Charge Safety Guard: The cloud provider's free tier has temporarily reached its token or request limit. "
         "OpsPilot has automatically cut off the connection to ensure you are NEVER charged.\n\n"
-        "🕒 When it resets:\n"
-        "• Minute limits refresh in ~60 seconds.\n"
-        "• Daily quotas reset at 00:00 UTC.\n\n"
-        "💡 You can retry in 1 minute, or switch to 'Local (Ollama)' in the sidebar for unlimited local queries."
+        "ðŸ•’ When it resets:\n"
+        "â€¢ Minute limits refresh in ~60 seconds.\n"
+        "â€¢ Daily quotas reset at 00:00 UTC.\n\n"
+        "ðŸ’¡ You can retry in 1 minute, or switch to 'Local (Ollama)' in the sidebar for unlimited local queries."
     )
 
 
@@ -269,16 +269,37 @@ class ChatPipelineResult:
         return self.result.completion_tokens
 
 
+def _prepare_messages(messages: list[ChatMessage]) -> list[ChatMessage]:
+    """Trim history to reduce latency/token usage while preserving recent context."""
+    if not messages:
+        return messages
+    # Keep system messages (if any) + last 20 conversational turns, cap oversized content.
+    system = [m for m in messages if m.role == "system"][:1]
+    convo = [m for m in messages if m.role != "system"]
+    convo = convo[-20:]
+    trimmed: list[ChatMessage] = []
+    for m in system + convo:
+        content = m.content or ""
+        if len(content) > 6000:
+            content = content[:6000] + "\n\n[...truncated for performance...]"
+        trimmed.append(ChatMessage(role=m.role, content=content))
+    return trimmed or messages[-20:]
+
+
+def _is_simple_greeting(text: str) -> bool:
+    t = (text or "").strip().lower()
+    return len(t) <= 40 and t in {"hi", "hello", "hey", "yo", "thanks", "thank you", "ok", "okay", "cool", "test", "ping"}
+
+
 async def chat(settings: Settings, messages: list[ChatMessage], provider: str | None, agent: str | None = None):
     """
     Returns ChatPipelineResult for the app pipeline. Also compatible with legacy
     monkeypatches/tests that expect (settings, messages, provider) -> LLMResult.
     """
-    # Support monkeypatched legacy callables in tests by trying flexible arity
-    # (this function itself is the implementation; compatibility handled in router/helpers if patched)
     chosen = provider or settings.llm_provider
     t0 = time.perf_counter()
     _METRICS["queries_count"] += 1
+    messages = _prepare_messages(messages)
     user_text = messages[-1].content if messages else ""
 
     interception = rag.intercept_consequential_action(user_text)
@@ -291,14 +312,17 @@ async def chat(settings: Settings, messages: list[ChatMessage], provider: str | 
         )
 
     t_route = time.perf_counter()
-    active_agent = agent if agent and agent != "auto" else rag.classify_agent(user_text)
-    chunks, citations = rag.search_knowledge(user_text)
+    active_agent = agent if agent and agent != "auto" else ("knowledge" if _is_simple_greeting(user_text) else rag.classify_agent(user_text))
+    if _is_simple_greeting(user_text):
+        chunks, citations = [], []
+    else:
+        chunks, citations = rag.search_knowledge(user_text)
     custom_prompt = rag.build_agent_system_prompt(active_agent, chunks)
     agent_display = f"{active_agent.capitalize()} Agent"
     t_prep = time.perf_counter()
     logger.info(
-        "chat provider=%s agent=%s messages=%d prep_ms=%d citations=%d",
-        chosen, active_agent, len(messages), int((t_prep - t_route) * 1000), len(citations),
+        "chat provider=%s agent=%s messages=%d prep_ms=%d total_prep_ms=%d citations=%d",
+        chosen, active_agent, len(messages), int((t_prep - t_route) * 1000), int((t_prep - t0) * 1000), len(citations),
     )
 
     if chosen == "cloud":
@@ -356,7 +380,7 @@ def _record_metrics(result: LLMResult) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Streaming helpers — yields raw token strings, then a final "[DONE]" sentinel
+# Streaming helpers â€” yields raw token strings, then a final "[DONE]" sentinel
 # ---------------------------------------------------------------------------
 
 async def stream_ollama(
@@ -559,6 +583,7 @@ async def stream_chat(
     chosen = provider or settings.llm_provider
     t0 = time.perf_counter()
     _METRICS["queries_count"] += 1
+    messages = _prepare_messages(messages)
     logger.info("stream_chat provider=%s messages=%d agent=%s", chosen, len(messages), agent)
 
     user_text = messages[-1].content if messages else ""
@@ -579,8 +604,11 @@ async def stream_chat(
         return
 
     t_route = time.perf_counter()
-    active_agent = agent if agent and agent != "auto" else rag.classify_agent(user_text)
-    chunks, citations = rag.search_knowledge(user_text)
+    active_agent = agent if agent and agent != "auto" else ("knowledge" if _is_simple_greeting(user_text) else rag.classify_agent(user_text))
+    if _is_simple_greeting(user_text):
+        chunks, citations = [], []
+    else:
+        chunks, citations = rag.search_knowledge(user_text)
     custom_prompt = rag.build_agent_system_prompt(active_agent, chunks)
     agent_display = f"{active_agent.capitalize()} Agent"
     logger.info(
