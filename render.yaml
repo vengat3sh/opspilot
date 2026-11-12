@@ -1,19 +1,47 @@
 services:
   - type: web
     name: opspilot
-    env: docker
-    dockerfilePath: Dockerfile
+    runtime: docker
+    dockerfilePath: ./Dockerfile
     plan: free
     region: oregon
     healthCheckPath: /health
+    # Runs once before the new version starts serving traffic (if supported by your Render plan/service).
+    # Keep single-worker/startup to avoid concurrent Alembic migrations.
+    preDeployCommand: alembic upgrade head
     envVars:
+      - key: APP_ENV
+        value: production
       - key: LLM_PROVIDER
         value: cloud
-      # Option 1: OpenRouter (100% Free verified model)
       - key: CLOUD_BASE_URL
         value: https://openrouter.ai/api/v1
       - key: CLOUD_MODEL
         value: nvidia/nemotron-3.5-lightning:free
       - key: CLOUD_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: FRONTEND_BASE_URL
+        sync: false
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: COOKIE_SAMESITE
+        sync: false
+      - key: SESSION_COOKIE_NAME
+        value: opspilot_session
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        sync: false
+      - key: REFRESH_TOKEN_EXPIRE_DAYS
+        sync: false
+      - key: BOOTSTRAP_SUPER_ADMIN_EMAIL
+        sync: false
+      - key: BOOTSTRAP_SUPER_ADMIN_PASSWORD
+        sync: false
+      - key: BOOTSTRAP_SUPER_ADMIN_NAME
         sync: false
 

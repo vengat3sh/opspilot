@@ -69,8 +69,36 @@ app.include_router(admin_router)
 
 
 @app.get("/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok", "service": "opspilot-api", "version": app.version}
+async def health():
+    """Liveness/readiness-style health check with safe diagnostics (no credentials)."""
+    db_ok = False
+    db_error = None
+    migration_version = None
+    try:
+        from sqlalchemy import text
+        from .db.session import engine
+
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+            db_ok = True
+            try:
+                row = conn.execute(text("SELECT version_num FROM alembic_version LIMIT 1")).fetchone()
+                migration_version = row[0] if row else None
+            except Exception:
+                migration_version = None
+    except Exception as exc:
+        db_error = type(exc).__name__
+
+    overall_ok = db_ok
+    return {
+        "status": "ok" if overall_ok else "degraded",
+        "service": "opspilot-api",
+        "version": app.version,
+        "checks": {
+            "database": {"ok": db_ok, "error": db_error},
+            "migrations": {"ok": migration_version is not None, "version": migration_version},
+        },
+    }
 
 
 # Production deployment: Mount frontend dist (works in Docker container & local dev)

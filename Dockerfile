@@ -16,8 +16,10 @@ WORKDIR /srv
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy backend code
+# Copy backend code, migrations, and runtime config needed in production
 COPY backend/app ./app
+COPY backend/alembic.ini ./alembic.ini
+COPY backend/alembic ./alembic
 
 # Copy built frontend assets to where FastAPI mounts them
 COPY --from=frontend-builder /app/frontend/dist /srv/frontend/dist
