@@ -3,7 +3,7 @@ import axios, { AxiosError } from "axios";
 // Empty string = same origin (production behind nginx proxy); dev uses VITE_API_URL.
 const baseURL = import.meta.env.VITE_API_URL ?? "";
 
-export const http = axios.create({ baseURL, timeout: 130_000 });
+export const http = axios.create({ baseURL, timeout: 130_000, withCredentials: true });
 
 export type Role = "system" | "user" | "assistant";
 export type Provider = "ollama" | "cloud";
@@ -264,6 +264,47 @@ export async function getIncidents(projectId?: string): Promise<IncidentItem[]> 
   return data;
 }
 
+export interface AuthUser {
+  id: string;
+  full_name: string;
+  email: string;
+  is_active: boolean;
+  is_verified: boolean;
+  roles: string[];
+  created_at?: string | null;
+  last_login_at?: string | null;
+}
+
+export interface AuthResponse {
+  user: AuthUser;
+  access_token?: string | null;
+  token_type: string;
+}
+
+export async function authMe(): Promise<AuthResponse> {
+  const { data } = await http.get<AuthResponse>("/api/v1/auth/me");
+  return data;
+}
+
+export async function userLogin(payload: { email: string; password: string; remember_me?: boolean }): Promise<AuthResponse> {
+  const { data } = await http.post<AuthResponse>("/api/v1/auth/user/login", payload);
+  return data;
+}
+
+export async function adminLogin(payload: { email: string; password: string; remember_me?: boolean }): Promise<AuthResponse> {
+  const { data } = await http.post<AuthResponse>("/api/v1/auth/admin/login", payload);
+  return data;
+}
+
+export async function userRegister(payload: { full_name: string; email: string; password: string; confirm_password: string; terms_accepted: boolean }): Promise<AuthResponse> {
+  const { data } = await http.post<AuthResponse>("/api/v1/auth/user/register", payload);
+  return data;
+}
+
+export async function authLogout(): Promise<void> {
+  await http.post("/api/v1/auth/user/logout");
+}
+
 /**
  * Stream chat via SSE. Calls onToken for each text chunk, onDone with final
  * metadata, and onError on failure. Returns an AbortController so callers
@@ -285,6 +326,7 @@ export function streamChat(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ messages, provider, agent }),
     signal: controller.signal,
+    credentials: "include",
   })
     .then(async (res) => {
       if (!res.ok || !res.body) {
