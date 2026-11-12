@@ -310,7 +310,7 @@ function AuthenticatedApp({ user, onSignOut }: { user: AuthUser; onSignOut: () =
         {dccTabs.has(activeTab) && (
           <DeveloperCommandCenter tab={activeTab as any} searchQuery={search} onConnectRepo={() => setActiveTab("connect")} onOpenEngineer={() => setActiveTab("engineer")} onSelectProject={(p) => { setSelectedProject(p); setActiveTab("projects"); }} userName={user.full_name || "User"} />
         )}
-        {activeTab === "engineer" && <AIEngineerView turns={turns} input={input} setInput={setInput} isPending={isPendingUI} onSend={sendMessage} onQuickPrompt={sendMessage} />}
+        {activeTab === "engineer" && <AIEngineerView turns={turns} input={input} setInput={setInput} isPending={isPendingUI} onSend={sendMessage} onQuickPrompt={sendMessage} onCancel={() => { abortRef.current?.abort(); setPending(false); setTurns(prev => { const c = [...prev]; const l = c[c.length - 1]; if (l?.streaming) c[c.length - 1] = { ...l, streaming: false, content: l.content || "Generation cancelled." }; return c; }); }} />}
         {activeTab === "knowledge" && <DocumentsView />}
         {activeTab === "approvals" && <ApprovalsView />}
         {activeTab === "analytics" && <DashboardView />}

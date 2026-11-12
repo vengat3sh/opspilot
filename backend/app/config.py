@@ -8,7 +8,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    llm_provider: Literal["ollama", "cloud"] = "ollama"
+    # Cloud-first default; Ollama remains optional/local fallback when explicitly enabled/configured.
+    llm_provider: Literal["ollama", "cloud"] = "cloud"
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "qwen3:1.7b"
 

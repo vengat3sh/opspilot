@@ -16,9 +16,22 @@ SettingsDep = Annotated[Settings, Depends(get_settings)]
 @router.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest, settings: SettingsDep) -> ChatResponse:
     try:
-        result = await llm.chat(settings, req.messages, req.provider)
+        try:
+            out = llm.chat(settings, req.messages, req.provider, req.agent)
+        except TypeError:
+            out = llm.chat(settings, req.messages, req.provider)
+        pipeline = await out
+        # Compatibility: legacy monkeypatches may return LLMResult
+        if isinstance(pipeline, llm.LLMResult):
+            result = pipeline
+            agent = req.agent or "knowledge"
+            citations: list[str] = []
+        else:
+            result = pipeline.result
+            agent = getattr(pipeline, "agent", req.agent or "knowledge")
+            citations = getattr(pipeline, "citations", [])
     except llm.LLMError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(status_code=getattr(exc, "status_code", 502), detail=str(exc)) from exc
     return ChatResponse(
         reply=result.text,
         provider=result.provider,
@@ -26,7 +39,8 @@ async def chat(req: ChatRequest, settings: SettingsDep) -> ChatResponse:
         latency_ms=result.latency_ms,
         prompt_tokens=result.prompt_tokens,
         completion_tokens=result.completion_tokens,
-        agent=req.agent,
+        agent=agent,
+        citations=citations,
     )
 
 

@@ -56,18 +56,21 @@ def search_knowledge(query: str, top_k: int = 3) -> tuple[list[RetrievedChunk], 
     citations: list[str] = []
 
     for doc in _DOCUMENTS:
-        doc_chunks = chunk_document(doc.id, doc.filename, doc.category, doc.preview)
+        # Use full_text/preview as available; limit chunking work on large previews
+        doc_chunks = chunk_document(doc.id, doc.filename, doc.category, (doc.preview or "")[:4000])
         for chunk in doc_chunks:
             chunk_tokens = _tokenize(chunk.text)
             overlap = len(query_tokens.intersection(chunk_tokens))
             if overlap > 0:
-                # BM25-like scoring based on term overlap & density
                 score = overlap / (math.log(len(chunk_tokens) + 2) + 1.0)
                 chunk.score = round(score, 3)
+                # Trim chunk text to reduce prompt tokens
+                if len(chunk.text) > 900:
+                    chunk.text = chunk.text[:900].rsplit(" ", 1)[0] + "…"
                 scored_chunks.append(chunk)
 
     scored_chunks.sort(key=lambda c: c.score, reverse=True)
-    results = scored_chunks[:top_k]
+    results = scored_chunks[: max(1, min(top_k, 3))]
 
     for c in results:
         cite = f"[{c.filename} • Chunk {c.chunk_index}]"
@@ -99,46 +102,51 @@ def build_agent_system_prompt(agent: AgentType, retrieved_chunks: list[Retrieved
     if retrieved_chunks:
         rag_context = "\n\n=== RETRIEVED ENTERPRISE KNOWLEDGE ===\n"
         for c in retrieved_chunks:
-            rag_context += f"Source [{c.filename} Chunk {c.chunk_index} ({c.category})]:\n{c.text}\n\n"
+            rag_context += f"Source [{c.filename} • Chunk {c.chunk_index} ({c.category})]:\n{c.text}\n\n"
         rag_context += (
             "=== CITATION RULES ===\n"
-            "1. Ground your answer in the retrieved facts above.\n"
-            "2. Whenever mentioning a policy, runbook step, or rule, cite the exact source as `[Filename • Chunk #]`.\n"
-            "3. If the retrieved facts do not contain sufficient evidence to answer, state clearly: "
-            "'I cannot confidently answer this from our current verified enterprise documents.'"
+            "1. Ground answers in retrieved facts above and available project context.\n"
+            "2. When using retrieved policy/runbook facts, cite the exact source as `[Filename • Chunk #]`.\n"
         )
+
+    grounding = (
+        "\n\n=== ACCURACY & GROUNDING ===\n"
+        "- Base technical answers on actual project code, API routes, documentation, and retrieved knowledge available in this conversation.\n"
+        "- Do NOT invent endpoints, infrastructure capabilities, deployment status, integrations, metrics, or file contents.\n"
+        "- If information is unavailable or cannot be verified from available context, explicitly say so and state what evidence is missing.\n"
+        "- Keep answers concise, structured, and technically accurate. Return only the final assistant response (no internal reasoning/thinking).\n"
+    )
 
     if agent == "knowledge":
         return (
-            "You are OpsPilot's Knowledge Agent, an expert in enterprise documentation, policies, and runbooks. "
-            "Deliver structured, accurate answers with bullet points, bold key terms, and exact source citations."
-            f"{rag_context}"
+            "You are OpsPilot's Knowledge Agent for enterprise documentation, policies, and runbooks. "
+            "Provide clear, structured answers with citations where supported."
+            f"{rag_context}{grounding}"
         )
 
     if agent == "research":
         return (
-            "You are OpsPilot's Research Agent, specializing in cross-document analysis, contradiction detection, "
-            "and synthesizing policies across departments. Provide balanced comparative tables and clear executive summaries."
-            f"{rag_context}"
+            "You are OpsPilot's Research Agent for cross-document analysis and synthesis. "
+            "Compare only what is supported by evidence; highlight unknowns explicitly."
+            f"{rag_context}{grounding}"
         )
 
     if agent == "operations":
         return (
-            "You are OpsPilot's Operations Agent, responsible for autonomous DevOps and IT infrastructure management. "
-            "For consequential or high-risk actions (scaling nodes, restarting databases, modifying firewall rules), "
-            "you MUST inform the user that a Human Approval request has been queued in the Approval Center for security. "
-            "Provide step-by-step runbooks, command examples, and rollback plans."
-            f"{rag_context}"
+            "You are OpsPilot's Operations Agent for DevOps/IT guidance. "
+            "For consequential or high-risk actions, state that human approval is required/queued by policy when applicable. "
+            "Provide step-by-step, safe, rollback-aware guidance based on verified context only."
+            f"{rag_context}{grounding}"
         )
 
     if agent == "analytics":
         return (
-            "You are OpsPilot's Analytics Agent, specializing in infrastructure telemetry, token economics, latency analysis, and incident MTTR. "
-            "Format data in clean tables, compute exact percentages, and summarize operational efficiency."
-            f"{rag_context}"
+            "You are OpsPilot's Analytics Agent for telemetry and operational reporting. "
+            "Use only provided metrics/data; do not fabricate numbers, trends, or system state."
+            f"{rag_context}{grounding}"
         )
 
-    return "You are OpsPilot, the enterprise AI operations platform."
+    return "You are OpsPilot, the enterprise AI operations platform." + grounding
 
 
 # ── Consequential Action Guard ──────────────────────────────────────────────

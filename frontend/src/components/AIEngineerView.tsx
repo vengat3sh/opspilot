@@ -74,6 +74,7 @@ export default function AIEngineerView({
   isPending,
   onSend,
   onQuickPrompt,
+  onCancel,
 }: {
   turns: Turn[];
   input: string;
@@ -81,6 +82,7 @@ export default function AIEngineerView({
   isPending: boolean;
   onSend: (text: string) => void;
   onQuickPrompt: (text: string) => void;
+  onCancel?: () => void;
 }) {
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -192,6 +194,12 @@ export default function AIEngineerView({
           </div>
 
           <div className="engineer-input-wrap">
+            {isPending && (
+              <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                <span>⏳ Generating response…</span>
+                {onCancel && <button type="button" className="dcc-btn dcc-btn-ghost" style={{ padding: "4px 10px", fontSize: 12 }} onClick={onCancel}>Cancel</button>}
+              </div>
+            )}
             <div className="chat-input-box">
               <textarea
                 ref={textareaRef}
@@ -201,7 +209,7 @@ export default function AIEngineerView({
                 onKeyDown={e => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
-                    onSend(input);
+                    if (!isPending && input.trim()) onSend(input);
                   }
                 }}
                 placeholder="Instruct the AI Engineer (e.g. “Fix login issue”, “Add Docker support”, “Review latest changes”)…"

@@ -59,7 +59,7 @@ async def test_cloud_requires_key():
 
 @pytest.mark.asyncio
 async def test_ollama_unreachable_is_llm_error():
-    s = Settings(ollama_base_url="http://127.0.0.1:1")
+    s = Settings(ollama_base_url="http://127.0.0.1:1", cloud_api_key=SecretStr(""))
     with pytest.raises(llm.LLMError):
         await llm.chat(s, [ChatMessage(role="user", content="hi")], "ollama")
 
