@@ -13,23 +13,36 @@ from app.schemas import ChatMessage
 client = TestClient(app)
 
 
-class _TestUser:
-    id = uuid.uuid4()
-    is_active = True
-    deleted_at = None
-
-
-def _auth_override():
-    return _TestUser()
-
-
 @pytest.fixture(autouse=True)
 def _auth_for_chat_tests(request):
-    # Keep existing unauthenticated behavior tests for non-chat endpoints.
+    # Chat now persists messages, so the authenticated principal must be a real
+    # database user. A unique throwaway account is removed after each test.
     if "chat" in request.node.name or "llm_status" in request.node.name:
-        app.dependency_overrides[get_current_user] = _auth_override
-        yield
-        app.dependency_overrides.pop(get_current_user, None)
+        from app.auth.security import hash_password
+        from app.db.models import User
+        from app.db.session import SessionLocal
+
+        db = SessionLocal()
+        email = f"chat-test-{uuid.uuid4().hex}@example.test"
+        user = User(
+            full_name="Chat Test User",
+            email=email,
+            normalized_email=email,
+            password_hash=hash_password("TestPass123!"),
+            is_active=True,
+            is_verified=True,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        app.dependency_overrides[get_current_user] = lambda: user
+        try:
+            yield
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+            db.delete(user)
+            db.commit()
+            db.close()
     else:
         yield
 

@@ -1,160 +1,200 @@
-import time
-from datetime import datetime
+"""Authenticated, PostgreSQL-backed project and repository context APIs.
 
-from fastapi import APIRouter, HTTPException
+The previous in-memory project/demo store has been replaced. Deployment,
+environment and incident records are intentionally empty until a real provider
+is connected; they are not fabricated.
+"""
+from __future__ import annotations
 
+import uuid
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from ..auth.deps import get_current_user
+from ..auth.service import log_audit
+from ..config import Settings, get_settings
+from ..db.models import ToolOperation, User
+from ..db.session import get_db
 from ..schemas import (
     DeploymentItem,
     EnvironmentItem,
     IncidentItem,
+    ProjectContextResponse,
     ProjectCreateRequest,
+    ProjectFileItem,
+    ProjectIndexResponse,
     ProjectItem,
+    ProjectTreeItem,
+    ProjectUpdateRequest,
     ProjectWorkflow,
     WorkflowStage,
 )
+from ..services.projects import (
+    build_project_context,
+    create_project,
+    get_project,
+    index_project,
+    list_project_files,
+    list_project_tree,
+    list_projects,
+    project_to_item,
+    update_project,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["projects"])
-
-_PROJECTS: list[ProjectItem] = [
-    ProjectItem(
-        id="proj-1",
-        name="opspilot-platform",
-        repo_provider="github",
-        repo_url="https://github.com/vengat3sh/opspilot",
-        default_branch="main",
-        status="connected",
-        language="TypeScript/Python",
-        framework="React + FastAPI",
-        last_synced="2 min ago",
-        health="healthy",
-        environments=3,
-        open_prs=2,
-        pending_changes=1,
-    ),
-    ProjectItem(
-        id="proj-2",
-        name="payments-api",
-        repo_provider="github",
-        repo_url="https://github.com/example/payments-api",
-        default_branch="main",
-        status="connected",
-        language="Python",
-        framework="FastAPI",
-        last_synced="18 min ago",
-        health="degraded",
-        environments=2,
-        open_prs=1,
-        pending_changes=3,
-    ),
-]
-
-_ENVIRONMENTS: list[EnvironmentItem] = [
-    EnvironmentItem(id="env-1", project_id="proj-1", name="development", provider="docker", status="running", url="http://localhost:5173", branch="dev", last_deploy="5 min ago"),
-    EnvironmentItem(id="env-2", project_id="proj-1", name="staging", provider="render", status="healthy", url="https://staging.opspilot.example", branch="main", last_deploy="32 min ago"),
-    EnvironmentItem(id="env-3", project_id="proj-1", name="production", provider="render", status="healthy", url="https://opspilot-q1xc.onrender.com", branch="main", last_deploy="2 hr ago"),
-    EnvironmentItem(id="env-4", project_id="proj-2", name="staging", provider="railway", status="degraded", url="https://payments-staging.example", branch="main", last_deploy="1 hr ago"),
-    EnvironmentItem(id="env-5", project_id="proj-2", name="production", provider="aws", status="healthy", url="https://api.payments.example", branch="main", last_deploy="Yesterday"),
-]
-
-_DEPLOYMENTS: list[DeploymentItem] = [
-    DeploymentItem(id="dep-101", project_id="proj-1", environment="production", status="Successful", commit="185a036", branch="main", created_at="2026-11-11 10:12", summary="UI refinement and navbar controls", url="https://opspilot-q1xc.onrender.com"),
-    DeploymentItem(id="dep-102", project_id="proj-1", environment="staging", status="Successful", commit="28c352b", branch="main", created_at="2026-11-11 09:44", summary="AI Engineer workspace redesign", url="https://staging.opspilot.example"),
-    DeploymentItem(id="dep-103", project_id="proj-2", environment="staging", status="Failed", commit="a91cd20", branch="feature/auth-fix", created_at="2026-11-11 08:55", summary="Auth middleware refactor failed health checks"),
-    DeploymentItem(id="dep-104", project_id="proj-1", environment="development", status="Queued", commit="local", branch="dev", created_at="2026-11-11 10:20", summary="Local sandbox build queued"),
-]
-
-_INCIDENTS: list[IncidentItem] = [
-    IncidentItem(id="inc-1", project_id="proj-2", title="HTTP 500 spike on /auth/login", severity="critical", status="investigating", service="payments-api-staging", detected_at="12 min ago", summary="Error rate increased after latest deployment; health checks failing intermittently.", recommendation="Compare dep-103 diff, inspect auth middleware logs, rollback staging if needed after approval."),
-    IncidentItem(id="inc-2", project_id="proj-1", title="Elevated latency on /api/chat/stream", severity="medium", status="mitigated", service="opspilot-production", detected_at="1 hr ago", summary="P95 latency increased during provider fallback.", recommendation="Monitor provider fallback rate and enable response caching for repeated prompts."),
-]
+DB = Annotated[Session, Depends(get_db)]
+CurrentUser = Annotated[User, Depends(get_current_user)]
+SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 
 @router.get("/projects", response_model=list[ProjectItem])
-async def list_projects() -> list[ProjectItem]:
-    return _PROJECTS
+def list_all(
+    db: DB,
+    user: CurrentUser,
+    q: str | None = Query(default=None, max_length=200),
+    limit: int = Query(default=100, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> list[ProjectItem]:
+    return list_projects(db, user, q=q, limit=limit, offset=offset)
 
 
-@router.post("/projects", response_model=ProjectItem)
-async def create_project(req: ProjectCreateRequest) -> ProjectItem:
-    item = ProjectItem(
-        id=f"proj-{int(time.time())}",
-        name=req.name,
-        repo_provider=req.repo_provider,
-        repo_url=req.repo_url,
-        default_branch=req.default_branch,
-        status="connected",
-        language="Detecting...",
-        framework="Detecting...",
-        last_synced="just now",
-        health="unknown",
-        environments=0,
-        open_prs=0,
-        pending_changes=0,
-    )
-    _PROJECTS.insert(0, item)
-    return item
+@router.post("/projects", response_model=ProjectItem, status_code=status.HTTP_201_CREATED)
+def create(req: ProjectCreateRequest, request: Request, db: DB, user: CurrentUser, settings: SettingsDep) -> ProjectItem:
+    project = create_project(db, user, req, settings)
+    log_audit(db, user.id, "project.create", "project", str(project.id), request.client.host if request.client else None, {"name": project.name})
+    return project_to_item(db, project)
 
 
 @router.get("/projects/{project_id}", response_model=ProjectItem)
-async def get_project(project_id: str) -> ProjectItem:
-    for p in _PROJECTS:
-        if p.id == project_id:
-            return p
-    raise HTTPException(status_code=404, detail="Project not found")
+def retrieve(project_id: uuid.UUID, db: DB, user: CurrentUser) -> ProjectItem:
+    return project_to_item(db, get_project(db, user, project_id))
+
+
+@router.patch("/projects/{project_id}", response_model=ProjectItem)
+def update(project_id: uuid.UUID, req: ProjectUpdateRequest, request: Request, db: DB, user: CurrentUser) -> ProjectItem:
+    project = update_project(db, user, project_id, req)
+    log_audit(db, user.id, "project.update", "project", str(project_id), request.client.host if request.client else None, {"fields": sorted(req.model_dump(exclude_none=True).keys())})
+    return project_to_item(db, project)
+
+
+@router.post("/projects/{project_id}/index", response_model=ProjectIndexResponse)
+def index(project_id: uuid.UUID, request: Request, db: DB, user: CurrentUser, settings: SettingsDep) -> ProjectIndexResponse:
+    out = index_project(db, user, project_id, settings)
+    log_audit(db, user.id, "project.index", "project", str(project_id), request.client.host if request.client else None, {"indexed_files": out.indexed_files, "skipped": out.skipped_files})
+    return out
+
+
+@router.get("/projects/{project_id}/tree", response_model=list[ProjectTreeItem])
+def tree(project_id: uuid.UUID, db: DB, user: CurrentUser, limit: int = Query(default=500, ge=1, le=2000)) -> list[ProjectTreeItem]:
+    return [ProjectTreeItem(**item) for item in list_project_tree(db, user, project_id, limit=limit)]
+
+
+@router.get("/projects/{project_id}/files", response_model=list[ProjectFileItem])
+def files(project_id: uuid.UUID, db: DB, user: CurrentUser, q: str | None = None, limit: int = Query(default=100, ge=1, le=500)) -> list[ProjectFileItem]:
+    rows = list_project_files(db, user, project_id, q=q, limit=limit)
+    return [
+        ProjectFileItem(
+            path=row.path,
+            size_bytes=row.size_bytes,
+            language=row.language,
+            indexed=row.indexed,
+            is_binary=row.is_binary,
+            excerpt=(row.excerpt or "")[:1000],
+        )
+        for row in rows
+    ]
+
+
+@router.get("/projects/{project_id}/context", response_model=ProjectContextResponse)
+def context(project_id: uuid.UUID, db: DB, user: CurrentUser, q: str = "") -> ProjectContextResponse:
+    text, chosen, project = build_project_context(db, user, project_id, query=q)
+    return ProjectContextResponse(
+        project_id=str(project.id),
+        project_name=project.name,
+        indexing_status=project.indexing_status,
+        repository_inspected=bool(chosen),
+        files=[
+            ProjectFileItem(
+                path=row.path,
+                size_bytes=row.size_bytes,
+                language=row.language,
+                indexed=row.indexed,
+                is_binary=row.is_binary,
+                excerpt=(row.excerpt or "")[:1000],
+            )
+            for row in chosen
+        ],
+        context=text,
+    )
 
 
 @router.get("/projects/{project_id}/workflow", response_model=ProjectWorkflow)
-async def get_project_workflow(project_id: str) -> ProjectWorkflow:
-    if not any(p.id == project_id for p in _PROJECTS):
-        raise HTTPException(status_code=404, detail="Project not found")
+def workflow(project_id: uuid.UUID, db: DB, user: CurrentUser) -> ProjectWorkflow:
+    project = get_project(db, user, project_id)
+    pending = db.execute(
+        select(func.count()).select_from(ToolOperation).where(
+            ToolOperation.project_id == project.id,
+            ToolOperation.status.in_(["pending_approval", "running"]),
+        )
+    ).scalar() or 0
+    indexed = project.indexing_status == "indexed"
     stages = [
-        WorkflowStage(name="Connect repository", status="done"),
-        WorkflowStage(name="Analyze & index codebase", status="done"),
-        WorkflowStage(name="Plan engineering task", status="done"),
-        WorkflowStage(name="Apply changes in sandbox", status="active"),
-        WorkflowStage(name="Run tests & code review", status="pending"),
-        WorkflowStage(name="Create PR / approval", status="pending"),
-        WorkflowStage(name="Build & deploy", status="pending"),
-        WorkflowStage(name="Monitor & diagnose", status="pending"),
+        WorkflowStage(name="Register repository", status="done" if project.workspace_path or project.repo_url else "pending"),
+        WorkflowStage(name="Index authorized source files", status="done" if indexed else "active"),
+        WorkflowStage(name="Inspect project context", status="done" if indexed else "pending"),
+        WorkflowStage(name="Propose changes", status="active" if indexed else "pending"),
+        WorkflowStage(name="Run approved checks", status="pending"),
+        WorkflowStage(name="Review diff / approval", status="pending"),
+        WorkflowStage(name="Deploy", status="pending"),
+        WorkflowStage(name="Monitor", status="pending"),
     ]
-    return ProjectWorkflow(project_id=project_id, stages=stages, current_step="Apply changes in sandbox", approvals_required=2)
+    return ProjectWorkflow(
+        project_id=str(project.id),
+        stages=stages,
+        current_step="Index authorized source files" if not indexed else "Propose changes",
+        approvals_required=int(pending),
+    )
 
 
+# These provider-backed resources are not connected. Returning an empty list is
+# honest; the UI labels this state instead of showing fabricated deployments.
 @router.get("/projects/{project_id}/environments", response_model=list[EnvironmentItem])
-async def list_project_environments(project_id: str) -> list[EnvironmentItem]:
-    return [e for e in _ENVIRONMENTS if e.project_id == project_id]
+def list_project_environments(project_id: uuid.UUID, db: DB, user: CurrentUser) -> list[EnvironmentItem]:
+    get_project(db, user, project_id)
+    return []
 
 
 @router.get("/environments", response_model=list[EnvironmentItem])
-async def list_environments() -> list[EnvironmentItem]:
-    return _ENVIRONMENTS
+def list_environments(db: DB, user: CurrentUser) -> list[EnvironmentItem]:
+    return []
 
 
 @router.get("/projects/{project_id}/deployments", response_model=list[DeploymentItem])
-async def list_project_deployments(project_id: str) -> list[DeploymentItem]:
-    return [d for d in _DEPLOYMENTS if d.project_id == project_id]
+def list_project_deployments(project_id: uuid.UUID, db: DB, user: CurrentUser) -> list[DeploymentItem]:
+    get_project(db, user, project_id)
+    return []
 
 
 @router.get("/deployments", response_model=list[DeploymentItem])
-async def list_deployments() -> list[DeploymentItem]:
-    return _DEPLOYMENTS
+def list_deployments(db: DB, user: CurrentUser) -> list[DeploymentItem]:
+    return []
 
 
 @router.post("/projects/{project_id}/deployments/{deployment_id}/rollback", response_model=DeploymentItem)
-async def rollback_deployment(project_id: str, deployment_id: str) -> DeploymentItem:
-    for d in _DEPLOYMENTS:
-        if d.id == deployment_id and d.project_id == project_id:
-            d.status = "Rolled back"
-            d.summary = f"Rollback requested at {datetime.now().strftime('%H:%M')} (approval required in production)"
-            return d
-    raise HTTPException(status_code=404, detail="Deployment not found")
+def rollback_deployment(project_id: uuid.UUID, deployment_id: str, db: DB, user: CurrentUser) -> DeploymentItem:
+    get_project(db, user, project_id)
+    raise HTTPException(status_code=503, detail="Deployment provider is not connected; rollback was not executed.")
 
 
 @router.get("/projects/{project_id}/incidents", response_model=list[IncidentItem])
-async def list_project_incidents(project_id: str) -> list[IncidentItem]:
-    return [i for i in _INCIDENTS if i.project_id == project_id]
+def list_project_incidents(project_id: uuid.UUID, db: DB, user: CurrentUser) -> list[IncidentItem]:
+    get_project(db, user, project_id)
+    return []
 
 
 @router.get("/incidents", response_model=list[IncidentItem])
-async def list_incidents() -> list[IncidentItem]:
-    return _INCIDENTS
+def list_incidents(db: DB, user: CurrentUser) -> list[IncidentItem]:
+    return []

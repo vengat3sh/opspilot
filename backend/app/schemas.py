@@ -1,5 +1,8 @@
 import time
-from typing import Literal
+import uuid
+from datetime import datetime
+from typing import Any, Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -12,6 +15,11 @@ class ChatRequest(BaseModel):
     messages: list[ChatMessage] = Field(min_length=1, max_length=50)
     provider: Literal["ollama", "cloud"] | None = None
     agent: str | None = "knowledge"
+    conversation_id: uuid.UUID | None = None
+    project_id: uuid.UUID | None = None
+    idempotency_key: str | None = Field(default=None, max_length=128)
+    regenerate: bool = False
+    parent_message_id: uuid.UUID | None = None
 
 
 class ChatResponse(BaseModel):
@@ -23,6 +31,95 @@ class ChatResponse(BaseModel):
     completion_tokens: int | None = None
     agent: str | None = "knowledge"
     citations: list[str] = Field(default_factory=list)
+    conversation_id: uuid.UUID | None = None
+    user_message_id: uuid.UUID | None = None
+    assistant_message_id: uuid.UUID | None = None
+    message_status: str | None = None
+
+
+# ── Persistent conversation schemas ───────────────────────────────────────
+
+MessageRole = Literal["system", "user", "assistant", "tool"]
+MessageStatus = Literal["pending", "streaming", "completed", "interrupted", "failed"]
+
+
+class ConversationCreate(BaseModel):
+    title: str | None = Field(default=None, max_length=255)
+    description: str | None = Field(default=None, max_length=4000)
+    project_id: uuid.UUID | None = None
+    organization_id: uuid.UUID | None = None
+    workspace_id: uuid.UUID | None = None
+    provider: Literal["ollama", "cloud"] | None = None
+    model: str | None = Field(default=None, max_length=128)
+
+
+class ConversationUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=4000)
+    project_id: uuid.UUID | None = None
+    archived: bool | None = None
+
+
+class MessageCreate(BaseModel):
+    role: Literal["system", "user"] = "user"
+    content: str = Field(min_length=1, max_length=100_000)
+    idempotency_key: str | None = Field(default=None, max_length=128)
+    parent_message_id: uuid.UUID | None = None
+
+
+class MessageEditRequest(BaseModel):
+    content: str = Field(min_length=1, max_length=100_000)
+
+
+class MessageOut(BaseModel):
+    id: uuid.UUID
+    conversation_id: uuid.UUID
+    user_id: uuid.UUID
+    role: str
+    content: str
+    message_type: str
+    status: str
+    model: str | None = None
+    provider: str | None = None
+    token_usage: dict[str, Any] | None = None
+    latency_ms: int | None = None
+    parent_message_id: uuid.UUID | None = None
+    error_message: str | None = None
+    sequence: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class MessagePage(BaseModel):
+    items: list[MessageOut]
+    has_more: bool
+    next_before_sequence: int | None = None
+
+
+class ConversationOut(BaseModel):
+    id: uuid.UUID
+    user_id: uuid.UUID
+    project_id: uuid.UUID | None = None
+    title: str
+    description: str | None = None
+    conversation_type: str
+    provider: str | None = None
+    model: str | None = None
+    status: str
+    last_message_at: datetime | None = None
+    archived_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+    message_count: int = 0
+    last_message_preview: str | None = None
+
+
+class ConversationList(BaseModel):
+    items: list[ConversationOut]
+    page: int
+    page_size: int
+    total: int
+    has_more: bool
 
 
 class LLMStatus(BaseModel):
@@ -91,7 +188,7 @@ class ApprovalItem(BaseModel):
 
 
 class ApprovalActionRequest(BaseModel):
-    approval_id: str
+    approval_id: str | None = None
     action: Literal["approve", "reject"]
     notes: str | None = None
 
@@ -186,3 +283,116 @@ class ProjectWorkflow(BaseModel):
     stages: list[WorkflowStage]
     current_step: str
     approvals_required: int
+
+
+# ── Persistent project & repository context schemas ────────────────────────
+
+class ProjectCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    repo_provider: str = Field(default="local", max_length=64)
+    repo_url: str | None = Field(default=None, max_length=1024)
+    default_branch: str = Field(default="main", max_length=128)
+    description: str | None = Field(default=None, max_length=4000)
+    workspace_path: str | None = Field(default=None, max_length=1024)
+    tech_stack: list[str] | None = None
+    organization_id: uuid.UUID | None = None
+    workspace_id: uuid.UUID | None = None
+
+
+class ProjectUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=4000)
+    repo_url: str | None = Field(default=None, max_length=1024)
+    default_branch: str | None = Field(default=None, max_length=128)
+    workspace_path: str | None = Field(default=None, max_length=1024)
+    tech_stack: list[str] | None = None
+    archived: bool | None = None
+
+
+class ProjectItem(BaseModel):
+    id: str
+    name: str
+    repo_provider: str = "local"
+    repo_url: str = ""
+    default_branch: str = "main"
+    status: str = "connected"
+    language: str = "Unknown"
+    framework: str = "Unknown"
+    last_synced: str = "Never"
+    health: str = "unknown"
+    environments: int = 0
+    open_prs: int = 0
+    pending_changes: int = 0
+    description: str | None = None
+    workspace_path: str | None = None
+    indexing_status: str = "not_indexed"
+    indexed_files: int = 0
+    last_indexed_at: str | None = None
+    repository_inspected: bool = False
+    repo_connected: bool = False
+
+
+class ProjectFileItem(BaseModel):
+    path: str
+    size_bytes: int
+    language: str | None = None
+    indexed: bool
+    is_binary: bool
+    excerpt: str | None = None
+
+
+class ProjectTreeItem(BaseModel):
+    path: str
+    type: Literal["file", "directory"]
+    size_bytes: int | None = None
+
+
+class ProjectIndexResponse(BaseModel):
+    project_id: str
+    indexing_status: str
+    indexed_files: int
+    skipped_files: int
+    root_configured: bool
+    message: str
+
+
+class ProjectContextResponse(BaseModel):
+    project_id: str
+    project_name: str
+    indexing_status: str
+    repository_inspected: bool
+    files: list[ProjectFileItem]
+    context: str
+
+
+# ── Controlled developer tools / approvals ─────────────────────────────────
+
+class ToolExecuteRequest(BaseModel):
+    tool: str = Field(min_length=1, max_length=128)
+    project_id: uuid.UUID
+    conversation_id: uuid.UUID | None = None
+    input: dict[str, Any] = Field(default_factory=dict)
+    idempotency_key: str | None = Field(default=None, max_length=128)
+
+
+class ToolOperationOut(BaseModel):
+    id: uuid.UUID
+    user_id: uuid.UUID
+    project_id: uuid.UUID | None = None
+    conversation_id: uuid.UUID | None = None
+    tool_name: str
+    action: str
+    risk_level: str
+    status: str
+    requires_approval: bool
+    input: dict[str, Any] | None = None
+    output: dict[str, Any] | None = None
+    error_message: str | None = None
+    created_at: datetime
+    approved_at: datetime | None = None
+    executed_at: datetime | None = None
+
+
+class ToolApprovalRequest(BaseModel):
+    action: Literal["approve", "reject"]
+    notes: str | None = Field(default=None, max_length=2000)

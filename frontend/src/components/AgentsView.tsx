@@ -10,7 +10,7 @@ export default function AgentsView({ onSelectAgent }: { onSelectAgent?: (agentId
       <div className="page-header">
         <div>
           <h1 className="page-title">AI Agents</h1>
-          <p className="page-subtitle">Stateful agent workflows with role-based authority and safety bounds</p>
+          <p className="page-subtitle">Registered agent roles, permitted tools, and persisted execution counts for your account</p>
         </div>
         <span className="badge badge-success">● {agents.length || 4} agents available</span>
       </div>

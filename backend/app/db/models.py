@@ -215,3 +215,249 @@ class AuditLog(Base, UUIDPrimaryKeyMixin):
 
 
 Index("ix_audit_logs_actor_action_ts", AuditLog.actor_user_id, AuditLog.action, AuditLog.timestamp)
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: persistent projects, conversations, messages, project indexing
+# and controlled tool operations.
+# ---------------------------------------------------------------------------
+
+
+class Project(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    __tablename__ = "projects"
+    __table_args__ = (
+        UniqueConstraint("owner_user_id", "name", name="uq_project_owner_name"),
+        Index("ix_projects_owner_updated", "owner_user_id", "updated_at"),
+        Index("ix_projects_org_workspace", "organization_id", "workspace_id"),
+    )
+
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    repo_provider: Mapped[str] = mapped_column(String(64), nullable=False, default="local", server_default="local")
+    repo_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    default_branch: Mapped[str] = mapped_column(String(128), nullable=False, default="main", server_default="main")
+    # Relative to PROJECT_WORKSPACE_ROOT. Never an arbitrary absolute host path.
+    workspace_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    tech_stack: Mapped[list | dict | None] = mapped_column(JSONB, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="connected", server_default="connected")
+    indexing_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="not_indexed", server_default="not_indexed"
+    )
+    last_indexed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    files: Mapped[list["ProjectFile"]] = relationship(
+        back_populates="project", cascade="all, delete-orphan", passive_deletes=True
+    )
+    conversations: Mapped[list["Conversation"]] = relationship(back_populates="project")
+
+
+class ProjectFile(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    __tablename__ = "project_files"
+    __table_args__ = (
+        UniqueConstraint("project_id", "path", name="uq_project_file_path"),
+        Index("ix_project_files_project_path", "project_id", "path"),
+    )
+
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    path: Mapped[str] = mapped_column(String(2048), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(nullable=False, default=0)
+    language: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    indexed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    is_binary: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+
+    project: Mapped[Project] = relationship(back_populates="files")
+
+
+class Conversation(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    __tablename__ = "conversations"
+    __table_args__ = (
+        Index("ix_conversations_user_last_message", "user_id", "last_message_at"),
+        Index("ix_conversations_user_archived", "user_id", "archived_at"),
+        Index("ix_conversations_project_updated", "project_id", "updated_at"),
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    conversation_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="chat", server_default="chat"
+    )
+    provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active", server_default="active")
+    last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    project: Mapped[Project | None] = relationship(back_populates="conversations")
+    messages: Mapped[list["Message"]] = relationship(
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="Message.sequence",
+    )
+
+
+class Message(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    __tablename__ = "messages"
+    __table_args__ = (
+        UniqueConstraint("conversation_id", "sequence", name="uq_message_conversation_sequence"),
+        UniqueConstraint("conversation_id", "idempotency_key", name="uq_message_conversation_idempotency"),
+        Index("ix_messages_conversation_sequence", "conversation_id", "sequence"),
+        Index("ix_messages_conversation_created", "conversation_id", "created_at"),
+    )
+
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    message_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="text", server_default="text"
+    )
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="completed", server_default="completed"
+    )
+    model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    token_usage: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    latency_ms: Mapped[int | None] = mapped_column(nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    parent_message_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("messages.id", ondelete="SET NULL"), nullable=True
+    )
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sequence: Mapped[int] = mapped_column(nullable=False)
+
+    conversation: Mapped[Conversation] = relationship(back_populates="messages")
+    parent: Mapped["Message | None"] = relationship(remote_side="Message.id")
+
+
+class ToolOperation(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    __tablename__ = "tool_operations"
+    __table_args__ = (
+        Index("ix_tool_operations_user_created", "user_id", "created_at"),
+        Index("ix_tool_operations_project_status", "project_id", "status"),
+        Index("ix_tool_operations_conversation_created", "conversation_id", "created_at"),
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    conversation_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    tool_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    action: Mapped[str] = mapped_column(String(128), nullable=False)
+    risk_level: Mapped[str] = mapped_column(String(32), nullable=False, default="low", server_default="low")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending", server_default="pending")
+    requires_approval: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    input_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    output_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class KnowledgeDocument(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """User-owned knowledge document used for grounded retrieval."""
+
+    __tablename__ = "knowledge_documents"
+    __table_args__ = (
+        Index("ix_knowledge_documents_owner_created", "owner_user_id", "created_at"),
+        Index("ix_knowledge_documents_owner_category", "owner_user_id", "category"),
+    )
+
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    filename: Mapped[str] = mapped_column(String(512), nullable=False)
+    file_type: Mapped[str] = mapped_column(String(32), nullable=False, default="txt", server_default="txt")
+    size_bytes: Mapped[int] = mapped_column(nullable=False, default=0, server_default="0")
+    chunks_count: Mapped[int] = mapped_column(nullable=False, default=0, server_default="0")
+    indexed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    category: Mapped[str] = mapped_column(String(128), nullable=False, default="General", server_default="General")
+    content: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+
+
+class Ticket(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """User-owned support/incident ticket."""
+
+    __tablename__ = "tickets"
+    __table_args__ = (
+        Index("ix_tickets_owner_created", "owner_user_id", "created_at"),
+        Index("ix_tickets_owner_status", "owner_user_id", "status"),
+    )
+
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    priority: Mapped[str] = mapped_column(String(16), nullable=False, default="medium", server_default="medium")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="open", server_default="open")
+    category: Mapped[str] = mapped_column(String(128), nullable=False, default="IT Support", server_default="IT Support")
+    assigned_agent: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ApprovalRequest(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """Explicit human approval request created by an agent or integration."""
+
+    __tablename__ = "approval_requests"
+    __table_args__ = (
+        Index("ix_approval_requests_owner_status", "owner_user_id", "status"),
+        Index("ix_approval_requests_owner_created", "owner_user_id", "created_at"),
+    )
+
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    action_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    details: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    requested_by: Mapped[str] = mapped_column(String(128), nullable=False, default="OpsPilot", server_default="OpsPilot")
+    risk_level: Mapped[str] = mapped_column(String(16), nullable=False, default="medium", server_default="medium")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending", server_default="pending")
+    decided_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    decision_notes: Mapped[str | None] = mapped_column(Text, nullable=True)

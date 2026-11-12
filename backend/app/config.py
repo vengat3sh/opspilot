@@ -62,6 +62,29 @@ class Settings(BaseSettings):
     # Diagnostics (optional, non-public; set to enable protected diagnostics endpoint)
     diagnostics_token: SecretStr = SecretStr("")
 
+    # Project/repository indexing. PROJECT_WORKSPACE_ROOT must be explicitly
+    # configured before a local workspace can be indexed. Paths are resolved
+    # relative to this root and can never escape it.
+    project_workspace_root: str = ""
+    project_max_file_bytes: int = 262_144
+    project_max_files: int = 2_000
+    project_index_excerpt_chars: int = 4_000
+
+    # Developer tool execution. Consequential/build/test tools never run on the
+    # host. They require an explicitly enabled Docker sandbox.
+    sandbox_enabled: bool = False
+    sandbox_docker_bin: str = "docker"
+    sandbox_image: str = "python:3.12-slim"
+    sandbox_timeout_seconds: int = 60
+    sandbox_memory_limit: str = "512m"
+    sandbox_cpu_limit: str = "1.0"
+    sandbox_network_disabled: bool = True
+    tool_command_allowlist: str = "pytest,npm,python,node,git"
+
+    # Chat context budgeting.
+    llm_max_history_messages: int = 20
+    llm_max_message_chars: int = 6_000
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

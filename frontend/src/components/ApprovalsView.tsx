@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getApprovals, submitApprovalAction } from "../api";
+import { errorMessage, getApprovals, submitApprovalAction } from "../api";
 
 export default function ApprovalsView() {
   const queryClient = useQueryClient();
@@ -9,6 +9,7 @@ export default function ApprovalsView() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["approvals"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-metrics"] });
+      queryClient.invalidateQueries({ queryKey: ["tool-ops"] });
     },
   });
 
@@ -25,6 +26,12 @@ export default function ApprovalsView() {
         </div>
         <span className="badge badge-info">🛡️ Zero unauthorized execution</span>
       </div>
+
+      {actionMutation.isError && (
+        <div className="empty-state" style={{ marginBottom: 16, color: "var(--error)" }}>
+          {errorMessage(actionMutation.error)}
+        </div>
+      )}
 
       {isLoading ? <div className="muted">Loading approvals…</div> : isError ? <div className="empty-state">Unable to load approvals.</div> : (
         <>

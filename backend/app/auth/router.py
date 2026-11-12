@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..db.models import AuditLog, Role, User, UserRole, UserSession
+from ..db.models import AuditLog, Conversation, Message, Project, Role, ToolOperation, User, UserRole, UserSession
 from ..db.session import get_db
 from .deps import get_current_user, get_user_role_names, require_admin, require_super_admin
 from .schemas import (
@@ -335,12 +335,15 @@ def admin_metrics(db: Session = Depends(get_db), _: User = Depends(require_admin
         "active_users": active_users,
         "verified_users": verified_users,
         "total_administrators": admin_count,
-        "active_projects": 0,
+        "active_projects": db.execute(select(func.count()).select_from(Project).where(Project.archived_at.is_(None))).scalar() or 0,
+        "total_conversations": db.execute(select(func.count()).select_from(Conversation).where(Conversation.deleted_at.is_(None))).scalar() or 0,
+        "total_messages": db.execute(select(func.count()).select_from(Message)).scalar() or 0,
         "total_workspaces": 0,
         "successful_deployments": 0,
         "failed_deployments": 0,
         "open_incidents": 0,
-        "pending_approvals": 0,
+        "pending_approvals": db.execute(select(func.count()).select_from(ToolOperation).where(ToolOperation.status == "pending_approval")).scalar() or 0,
+        "provider_integrations_connected": False,
     }
 
 
@@ -349,7 +352,7 @@ def admin_db_health(db: Session = Depends(get_db), _: User = Depends(require_adm
     try:
         db.execute(select(1))
         # table existence checks (best effort)
-        tables = [User.__tablename__, Role.__tablename__, UserRole.__tablename__, UserSession.__tablename__, AuditLog.__tablename__]
+        tables = [User.__tablename__, Role.__tablename__, UserRole.__tablename__, UserSession.__tablename__, AuditLog.__tablename__, Project.__tablename__, Conversation.__tablename__, Message.__tablename__, ToolOperation.__tablename__]
         return {"status": "ok", "database": "postgresql", "connected": True, "checked_tables": tables}
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Database unhealthy: {type(exc).__name__}")

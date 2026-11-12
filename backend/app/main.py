@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
-from .routers import chat, operations, projects
+from .routers import chat, conversations, diagnostics, operations, projects, tools
 from .auth.router import admin_router, router as auth_router
 
 settings = get_settings()
@@ -62,6 +62,9 @@ async def request_context_and_errors(request: Request, call_next):
 
 
 app.include_router(chat.router)
+app.include_router(conversations.router)
+app.include_router(tools.router)
+app.include_router(diagnostics.router)
 app.include_router(operations.router)
 app.include_router(projects.router)
 app.include_router(auth_router)

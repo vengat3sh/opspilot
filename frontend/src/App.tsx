@@ -1,23 +1,33 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   adminLogin,
   authLogout,
   authMe,
+  cancelAssistantGeneration,
+  deleteConversation,
+  editUserMessage,
   errorMessage,
   getApprovals,
   getIncidents,
   getLLMStatus,
+  getMessages,
+  getProjects,
+  getToolOperations,
+  listConversations,
   streamChat,
+  updateConversation,
   userLogin,
   userRegister,
   type AuthUser,
   type ChatMessage,
-  type ProjectItem,
+  type ConversationItem,
+  type MessageItem,
   type Provider,
   type StreamMeta,
   type TicketItem,
+  type ToolOperation,
 } from "./api";
 
 import AIEngineerView from "./components/AIEngineerView";
@@ -33,11 +43,17 @@ type NavTab =
   | "cloud" | "infra" | "build" | "history" | "monitoring" | "incidents"
   | "approvals" | "knowledge" | "analytics" | "settings" | "agents" | "tickets";
 
-interface Turn { role: "user" | "assistant"; content: string; meta?: StreamMeta; error?: boolean; streaming?: boolean; }
-interface ChatSession { id: string; title: string; createdAt: number; turns: Turn[]; }
-
-function loadSavedSessions(): ChatSession[] { try { const raw = localStorage.getItem("opspilot_sessions"); return raw ? JSON.parse(raw) : []; } catch { return []; } }
-function saveSessions(sessions: ChatSession[]) { try { localStorage.setItem("opspilot_sessions", JSON.stringify(sessions)); } catch {} }
+interface Turn {
+  id?: string;
+  role: "user" | "assistant";
+  content: string;
+  meta?: StreamMeta;
+  error?: boolean;
+  streaming?: boolean;
+  interrupted?: boolean;
+  createdAt?: string;
+  status?: string;
+}
 function getInitialTheme(): "light" | "dark" {
   try {
     const saved = localStorage.getItem("opspilot_theme");
@@ -251,12 +267,12 @@ export default function App() {
 }
 
 function AuthenticatedApp({ user, theme, setTheme, onSignOut }: { user: AuthUser; theme: "light" | "dark"; setTheme: (t: "light" | "dark") => void; onSignOut: () => Promise<void> }) {
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTabState] = useState<NavTab>("overview");
   const [, setTabHistory] = useState<NavTab[]>([]);
-  const [, setSelectedProject] = useState<ProjectItem | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<string>("auto");
-  const [sessions, setSessions] = useState<ChatSession[]>(() => loadSavedSessions());
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
   const [provider, setProvider] = useState<Provider>("cloud");
@@ -268,12 +284,35 @@ function AuthenticatedApp({ user, theme, setTheme, onSignOut }: { user: AuthUser
   const isPendingRef = useRef(false);
   const [isPendingUI, setIsPendingUI] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const [lastAssistantId, setLastAssistantId] = useState<string | null>(null);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [conversationSearch, setConversationSearch] = useState("");
+  const [conversationPage, setConversationPage] = useState(1);
+  const [showArchived, setShowArchived] = useState(false);
+  const [olderCursor, setOlderCursor] = useState<number | null>(null);
+  const [hasOlder, setHasOlder] = useState(false);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [toolOps, setToolOps] = useState<ToolOperation[]>([]);
+  const [contextNotice, setContextNotice] = useState<string | null>(null);
 
   const status = useQuery({ queryKey: ["llm-status"], queryFn: getLLMStatus, refetchInterval: 15_000 });
   const approvalsQuery = useQuery({ queryKey: ["approvals"], queryFn: getApprovals, refetchInterval: 15_000 });
   const incidentsQuery = useQuery({ queryKey: ["incidents"], queryFn: () => getIncidents(), refetchInterval: 20_000 });
+  const projectsQuery = useQuery({ queryKey: ["projects"], queryFn: getProjects, refetchInterval: 30_000 });
+  const conversationsQuery = useQuery({
+    queryKey: ["conversations", conversationSearch, conversationPage, showArchived],
+    queryFn: () => listConversations({ q: conversationSearch || undefined, archived: showArchived, page: conversationPage, limit: 30 }),
+    refetchInterval: 20_000,
+  });
+  const toolOpsQuery = useQuery({
+    queryKey: ["tool-ops", activeConversationId, selectedProjectId],
+    queryFn: () => getToolOperations({ conversationId: activeConversationId || undefined, projectId: selectedProjectId || undefined }),
+    enabled: Boolean(activeConversationId || selectedProjectId),
+    refetchInterval: 10_000,
+  });
 
   useEffect(() => { if (status.data) { if (!status.data.ollama_reachable) setProvider("cloud"); else if (status.data.provider) setProvider(status.data.provider as Provider); } }, [status.data]);
+  useEffect(() => { if (toolOpsQuery.data) setToolOps(toolOpsQuery.data); }, [toolOpsQuery.data]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setCmdkOpen(v => !v); }
@@ -285,27 +324,214 @@ function AuthenticatedApp({ user, theme, setTheme, onSignOut }: { user: AuthUser
 
   function setActiveTab(next: NavTab) { setActiveTabState(prev => { if (prev !== next) setTabHistory(h => [...h, prev].slice(-12)); return next; }); setMobileNavOpen(false); setNotifOpen(false); setProfileOpen(false); }
   function setPending(v: boolean) { isPendingRef.current = v; setIsPendingUI(v); }
-  function startNewChat() { abortRef.current?.abort(); setActiveSessionId(null); setTurns([]); setInput(""); setPending(false); setActiveTab("engineer"); }
-  function switchSession(session: ChatSession) { abortRef.current?.abort(); setActiveSessionId(session.id); setTurns(session.turns); setInput(""); setPending(false); setActiveTab("engineer"); }
-  function updateSavedHistory(updatedTurns: Turn[], promptText?: string) {
-    setSessions(prev => {
-      let currentId = activeSessionId; let list = [...prev];
-      if (!currentId) { currentId = Date.now().toString(); setActiveSessionId(currentId); const title = promptText ? (promptText.slice(0, 34) + (promptText.length > 34 ? "..." : "")) : "Task session"; list.unshift({ id: currentId, title, createdAt: Date.now(), turns: updatedTurns }); }
-      else { const idx = list.findIndex(s => s.id === currentId); if (idx !== -1) list[idx] = { ...list[idx], turns: updatedTurns }; }
-      saveSessions(list); return list;
+  function refreshConversations() { void queryClient.invalidateQueries({ queryKey: ["conversations"] }); }
+  function refreshTools() { void queryClient.invalidateQueries({ queryKey: ["tool-ops"] }); }
+  function startNewChat() { abortRef.current?.abort(); setActiveConversationId(null); setTurns([]); setInput(""); setEditingIndex(null); setLastAssistantId(null); setOlderCursor(null); setHasOlder(false); setContextNotice(null); setPending(false); setActiveTab("engineer"); }
+
+  function messageToTurn(m: MessageItem): Turn | null {
+    if (m.role !== "user" && m.role !== "assistant") return null;
+    const meta: StreamMeta | undefined = m.role === "assistant" ? {
+      provider: m.provider || "",
+      model: m.model || "",
+      latency_ms: m.latency_ms || 0,
+      prompt_tokens: m.token_usage?.prompt_tokens ?? null,
+      completion_tokens: m.token_usage?.completion_tokens ?? null,
+      conversation_id: m.conversation_id,
+      assistant_message_id: m.id,
+      status: m.status,
+    } : undefined;
+    return {
+      id: m.id,
+      role: m.role,
+      content: m.content || (m.status === "failed" ? (m.error_message || "Generation failed") : ""),
+      meta,
+      error: m.status === "failed",
+      interrupted: m.status === "interrupted",
+      streaming: m.status === "streaming",
+      createdAt: m.created_at,
+      status: m.status,
+    };
+  }
+
+  async function openConversation(conv: ConversationItem) {
+    abortRef.current?.abort();
+    setActiveConversationId(conv.id);
+    setSelectedProjectId(conv.project_id || null);
+    setInput("");
+    setEditingIndex(null);
+    setLastAssistantId(null);
+    setContextNotice(null);
+    setPending(false);
+    setActiveTab("engineer");
+    setLoadingMessages(true);
+    try {
+      const page = await getMessages(conv.id, { limit: 50 });
+      setTurns(page.items.map(messageToTurn).filter((t): t is Turn => Boolean(t)));
+      setOlderCursor(page.next_before_sequence ?? null);
+      setHasOlder(page.has_more);
+      const lastAssistant = [...page.items].reverse().find(m => m.role === "assistant");
+      setLastAssistantId(lastAssistant?.id ?? null);
+    } catch (e) {
+      setTurns([{ role: "assistant", content: errorMessage(e), error: true }]);
+    } finally {
+      setLoadingMessages(false);
+    }
+  }
+
+  async function loadOlderMessages() {
+    if (!activeConversationId || !olderCursor || loadingMessages) return;
+    setLoadingMessages(true);
+    try {
+      const page = await getMessages(activeConversationId, { limit: 50, beforeSequence: olderCursor });
+      const older = page.items.map(messageToTurn).filter((t): t is Turn => Boolean(t));
+      setTurns(prev => [...older, ...prev]);
+      setOlderCursor(page.next_before_sequence ?? null);
+      setHasOlder(page.has_more);
+    } catch (e) {
+      setTurns(prev => [{ role: "assistant", content: errorMessage(e), error: true }, ...prev]);
+    } finally {
+      setLoadingMessages(false);
+    }
+  }
+
+  async function handleSelectProject(id: string | null) {
+    setSelectedProjectId(id);
+    if (!activeConversationId) return;
+    try {
+      await updateConversation(activeConversationId, { project_id: id });
+      refreshConversations();
+      setContextNotice(id ? "Project linked to this conversation." : "Project context cleared for this conversation.");
+    } catch (e) {
+      setContextNotice(errorMessage(e));
+    }
+  }
+
+  async function renameConversation(id: string, title: string) {    try { await updateConversation(id, { title }); refreshConversations(); } catch (e) { setContextNotice(errorMessage(e)); }
+  }
+  async function archiveConversation(id: string, archived: boolean) {
+    try { await updateConversation(id, { archived }); if (archived && id === activeConversationId) startNewChat(); refreshConversations(); } catch (e) { setContextNotice(errorMessage(e)); }
+  }
+  async function removeConversation(id: string) {
+    if (!window.confirm("Delete this conversation? This removes it from your history.")) return;
+    try { await deleteConversation(id); if (id === activeConversationId) startNewChat(); refreshConversations(); } catch (e) { setContextNotice(errorMessage(e)); }
+  }
+
+  async function sendMessage(text: string, options?: { regenerate?: boolean; editIndex?: number | null }) {
+    if (isPendingRef.current) return;
+    if (!options?.regenerate && !text.trim()) return;
+    abortRef.current?.abort();
+    const editIndex = options?.editIndex ?? editingIndex;
+    let baseTurns = turns;
+    let shouldRegenerate = Boolean(options?.regenerate);
+    if (editIndex != null) {
+      baseTurns = turns.slice(0, editIndex);
+      const edited = turns[editIndex];
+      if (activeConversationId && edited?.id) {
+        try {
+          await editUserMessage(activeConversationId, edited.id, text.trim());
+          shouldRegenerate = true;
+          refreshConversations();
+        } catch (e) {
+          setContextNotice(errorMessage(e));
+          return;
+        }
+      }
+    }
+    if (options?.regenerate) {
+      const lastAssistant = [...baseTurns].reverse().findIndex(t => t.role === "assistant");
+      if (lastAssistant >= 0) baseTurns = baseTurns.slice(0, baseTurns.length - 1 - lastAssistant);
+    }
+    const content = text.trim();
+    const userTurn: Turn = { role: "user", content: content || (baseTurns.filter(t => t.role === "user").slice(-1)[0]?.content ?? ""), createdAt: new Date().toISOString() };
+    const historyTurns = shouldRegenerate && editIndex == null ? baseTurns : [...baseTurns, userTurn];
+    const messages: ChatMessage[] = historyTurns
+      .filter(t => (t.role === "user" || t.role === "assistant") && t.content && !t.error)
+      .map(t => ({ role: t.role, content: t.content }));
+    if (!messages.length) return;
+    const newTurns: Turn[] = [...historyTurns, { role: "assistant", content: "", streaming: true, createdAt: new Date().toISOString() }];
+    setTurns(newTurns);
+    setInput("");
+    setEditingIndex(null);
+    setPending(true);
+    setActiveTab("engineer");
+    const idempotencyKey = (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`);
+    let conversationId = activeConversationId;
+    const updateLast = (patch: Partial<Turn>) => setTurns(prev => {
+      const c = [...prev];
+      const idx = c.length - 1;
+      if (idx >= 0 && c[idx]?.role === "assistant") c[idx] = { ...c[idx], ...patch };
+      return c;
+    });
+    abortRef.current = streamChat({
+      messages,
+      provider,
+      agent: selectedAgent,
+      conversationId,
+      projectId: selectedProjectId,
+      idempotencyKey,
+      regenerate: Boolean(options?.regenerate),
+    }, {
+      onStarted: meta => {
+        if (meta.conversation_id) { conversationId = meta.conversation_id; setActiveConversationId(meta.conversation_id); refreshConversations(); }
+        if (meta.assistant_message_id) setLastAssistantId(meta.assistant_message_id);
+        setContextNotice(meta.provider ? `Streaming via ${meta.provider}` : null);
+      },
+      onContext: meta => {
+        if (meta.project_id) setContextNotice(meta.repository_inspected ? "Project context retrieved from the repository index." : "Project selected, but no indexed files were inspected.");
+      },
+      onToken: token => setTurns(prev => {
+        const c = [...prev];
+        const idx = c.length - 1;
+        if (idx >= 0 && c[idx]?.role === "assistant" && c[idx]?.streaming) c[idx] = { ...c[idx], content: (c[idx].content || "") + token };
+        return c;
+      }),
+      onDone: meta => {
+        updateLast({ streaming: false, meta, status: meta.status || "completed" });
+        setPending(false);
+        if (meta.assistant_message_id) setLastAssistantId(meta.assistant_message_id);
+        refreshConversations();
+        refreshTools();
+      },
+      onInterrupted: (partial, meta) => {
+        updateLast({ streaming: false, interrupted: true, content: partial, meta, status: "interrupted" });
+        setPending(false);
+        refreshConversations();
+      },
+      onError: (msg, partial) => {
+        updateLast({ streaming: false, error: true, content: partial ? `${partial}\n\n⚠️ ${msg}` : msg, status: "failed" });
+        setPending(false);
+        refreshConversations();
+      },
     });
   }
-  function sendMessage(text: string) {
-    if (!text.trim() || isPendingRef.current) return;
+
+  function handleRegenerate() {
+    if (isPendingRef.current || !turns.some(t => t.role === "assistant")) return;
+    if (!activeConversationId) {
+      const userIndex = [...turns].map(t => t.role).lastIndexOf("user");
+      const lastUser = userIndex >= 0 ? turns[userIndex] : null;
+      if (lastUser) sendMessage(lastUser.content, { editIndex: userIndex });
+      return;
+    }
+    sendMessage("", { regenerate: true });
+  }
+  function handleEditTurn(index: number) {
+    const turn = turns[index];
+    if (!turn || turn.role !== "user") return;
+    setEditingIndex(index);
+    setInput(turn.content);
+  }
+  function handleCancel() {
     abortRef.current?.abort();
-    const messages: ChatMessage[] = [...turns.filter(t => !t.error).map(({ role, content }) => ({ role, content })), { role: "user" as const, content: text.trim() }];
-    const newTurns: Turn[] = [...turns, { role: "user", content: text.trim() }, { role: "assistant", content: "", streaming: true }];
-    setTurns(newTurns); updateSavedHistory(newTurns, text.trim()); setInput(""); setPending(true); setActiveTab("engineer");
-    abortRef.current = streamChat(messages, provider, selectedAgent,
-      token => setTurns(prev => { const c = [...prev], l = c[c.length - 1]; if (l?.streaming) c[c.length - 1] = { ...l, content: l.content + token }; return c; }),
-      meta => { setTurns(prev => { const c = [...prev], l = c[c.length - 1]; if (l?.streaming) c[c.length - 1] = { ...l, streaming: false, meta }; updateSavedHistory(c); return c; }); setPending(false); },
-      msg => { setTurns(prev => { const c = [...prev], l = c[c.length - 1]; if (l?.streaming) c[c.length - 1] = { role: "assistant", content: msg, error: true }; updateSavedHistory(c); return c; }); setPending(false); },
-    );
+    if (lastAssistantId) void cancelAssistantGeneration(lastAssistantId).catch(() => {});
+    setTurns(prev => {
+      const c = [...prev];
+      const l = c[c.length - 1];
+      if (l?.streaming) c[c.length - 1] = { ...l, streaming: false, interrupted: true, status: "interrupted", content: l.content || "Generation cancelled." };
+      return c;
+    });
+    setPending(false);
+    refreshConversations();
   }
   function handleSelectAgent(agentId: string) { const raw = agentId.replace("agent-", ""); setSelectedAgent(raw); setActiveTab("engineer"); sendMessage(`Operate as the ${raw.toUpperCase()} Agent and assist with the current project engineering workflow.`); }
   function handleInvestigateTicket(ticket: TicketItem) { setActiveTab("engineer"); sendMessage(`Investigate ticket ${ticket.id}: "${ticket.title}". Category: ${ticket.category}. Priority: ${ticket.priority}. Symptoms: ${ticket.description}. Provide root-cause analysis and remediation plan.`); }
@@ -403,9 +629,9 @@ function AuthenticatedApp({ user, theme, setTheme, onSignOut }: { user: AuthUser
                 })}
               </div>
             ))}
-            <div className="mobile-nav-group">Recent sessions</div>
-            {sessions.length === 0 ? <div className="muted" style={{ fontSize: 13, padding: "4px 8px" }}>No saved sessions</div> : sessions.slice(0, 6).map(s => (
-              <button key={s.id} type="button" className={`mobile-nav-item ${activeTab === "engineer" && activeSessionId === s.id ? "active" : ""}`} onClick={() => switchSession(s)}>{s.title}</button>
+            <div className="mobile-nav-group">Recent conversations</div>
+            {(conversationsQuery.data?.items ?? []).length === 0 ? <div className="muted" style={{ fontSize: 13, padding: "4px 8px" }}>No conversations yet</div> : (conversationsQuery.data?.items ?? []).slice(0, 6).map(s => (
+              <button key={s.id} type="button" className={`mobile-nav-item ${activeTab === "engineer" && activeConversationId === s.id ? "active" : ""}`} onClick={() => void openConversation(s)}>{s.title}</button>
             ))}
           </aside>
         </>
@@ -415,9 +641,47 @@ function AuthenticatedApp({ user, theme, setTheme, onSignOut }: { user: AuthUser
 
       <main className="app-main">
         {dccTabs.has(activeTab) && (
-          <DeveloperCommandCenter tab={activeTab as any} searchQuery={search} onConnectRepo={() => setActiveTab("connect")} onOpenEngineer={() => setActiveTab("engineer")} onSelectProject={(p) => { setSelectedProject(p); setActiveTab("projects"); }} userName={user.full_name || "User"} />
+          <DeveloperCommandCenter tab={activeTab as any} searchQuery={search} onConnectRepo={() => setActiveTab("connect")} onOpenEngineer={() => setActiveTab("engineer")} onSelectProject={(p) => { setSelectedProjectId(p.id); setActiveTab("projects"); }} userName={user.full_name || "User"} />
         )}
-        {activeTab === "engineer" && <AIEngineerView turns={turns} input={input} setInput={setInput} isPending={isPendingUI} onSend={sendMessage} onQuickPrompt={sendMessage} onCancel={() => { abortRef.current?.abort(); setPending(false); setTurns(prev => { const c = [...prev]; const l = c[c.length - 1]; if (l?.streaming) c[c.length - 1] = { ...l, streaming: false, content: l.content || "Generation cancelled." }; return c; }); }} />}
+        {activeTab === "engineer" && (
+          <AIEngineerView
+            turns={turns}
+            input={input}
+            setInput={setInput}
+            isPending={isPendingUI}
+            onSend={sendMessage}
+            onQuickPrompt={text => void sendMessage(text)}
+            onCancel={handleCancel}
+            conversations={conversationsQuery.data?.items ?? []}
+            conversationsLoading={conversationsQuery.isLoading}
+            conversationsTotal={conversationsQuery.data?.total ?? 0}
+            activeConversationId={activeConversationId}
+            onNewConversation={startNewChat}
+            onOpenConversation={conv => void openConversation(conv)}
+            onRenameConversation={renameConversation}
+            onDeleteConversation={removeConversation}
+            onArchiveConversation={archiveConversation}
+            conversationSearch={conversationSearch}
+            setConversationSearch={(v) => { setConversationSearch(v); setConversationPage(1); }}
+            conversationPage={conversationPage}
+            setConversationPage={setConversationPage}
+            conversationsHasMore={conversationsQuery.data?.has_more ?? false}
+            showArchived={showArchived}
+            setShowArchived={(v) => { setShowArchived(v); setConversationPage(1); }}
+            projects={projectsQuery.data ?? []}
+            selectedProjectId={selectedProjectId}
+            onSelectProject={id => void handleSelectProject(id)}
+            toolOps={toolOps}
+            onRegenerate={handleRegenerate}
+            onEditTurn={handleEditTurn}
+            onLoadOlder={() => void loadOlderMessages()}
+            hasOlder={hasOlder}
+            loadingMessages={loadingMessages}
+            contextNotice={contextNotice}
+            editingIndex={editingIndex}
+            onCancelEdit={() => { setEditingIndex(null); setInput(""); }}
+          />
+        )}
         {activeTab === "approvals" && <ApprovalsView />}
         {activeTab === "knowledge" && <DocumentsView />}
         {activeTab === "analytics" && <DashboardView />}

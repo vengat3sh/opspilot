@@ -1,10 +1,16 @@
+"""User-scoped retrieval over persisted knowledge documents and safety guards."""
+from __future__ import annotations
+
 import math
 import re
+import uuid
 from dataclasses import dataclass
 from typing import Literal
 
-from .routers.operations import _DOCUMENTS, _APPROVALS, _TICKETS
-from .schemas import ApprovalItem, TicketItem
+from sqlalchemy import select
+
+from .db.models import ApprovalRequest, KnowledgeDocument
+from .db.session import SessionLocal
 
 
 @dataclass
@@ -17,7 +23,7 @@ class RetrievedChunk:
     score: float
 
 
-# ── In-Memory Hybrid Keyword & Semantic RAG Index ────────────────────────────
+# ── Hybrid keyword retrieval over the caller's persisted documents ─────────
 
 def _tokenize(text: str) -> set[str]:
     return set(re.findall(r"\w+", text.lower()))
@@ -46,25 +52,45 @@ def chunk_document(doc_id: str, filename: str, category: str, full_text: str, ch
     return chunks
 
 
-def search_knowledge(query: str, top_k: int = 3) -> tuple[list[RetrievedChunk], list[str]]:
-    """Hybrid BM25-style keyword search over all indexed enterprise documents."""
+def search_knowledge(
+    query: str,
+    user_id: uuid.UUID | None = None,
+    top_k: int = 3,
+) -> tuple[list[RetrievedChunk], list[str]]:
+    """Search only the documents owned by ``user_id``.
+
+    Without a user id there is no safe corpus to search, so retrieval returns
+    nothing rather than falling back to another user's documents.
+    """
     query_tokens = _tokenize(query)
-    if not query_tokens:
+    if not query_tokens or user_id is None:
         return [], []
+
+    db = SessionLocal()
+    try:
+        docs = db.execute(
+            select(KnowledgeDocument)
+            .where(
+                KnowledgeDocument.owner_user_id == user_id,
+                KnowledgeDocument.indexed.is_(True),
+            )
+            .order_by(KnowledgeDocument.created_at.desc())
+            .limit(200)
+        ).scalars().all()
+    finally:
+        db.close()
 
     scored_chunks: list[RetrievedChunk] = []
     citations: list[str] = []
 
-    for doc in _DOCUMENTS:
-        # Use full_text/preview as available; limit chunking work on large previews
-        doc_chunks = chunk_document(doc.id, doc.filename, doc.category, (doc.preview or "")[:4000])
+    for doc in docs:
+        doc_chunks = chunk_document(str(doc.id), doc.filename, doc.category, (doc.content or "")[:4000])
         for chunk in doc_chunks:
             chunk_tokens = _tokenize(chunk.text)
             overlap = len(query_tokens.intersection(chunk_tokens))
             if overlap > 0:
                 score = overlap / (math.log(len(chunk_tokens) + 2) + 1.0)
                 chunk.score = round(score, 3)
-                # Trim chunk text to reduce prompt tokens
                 if len(chunk.text) > 900:
                     chunk.text = chunk.text[:900].rsplit(" ", 1)[0] + "…"
                 scored_chunks.append(chunk)
@@ -151,30 +177,71 @@ def build_agent_system_prompt(agent: AgentType, retrieved_chunks: list[Retrieved
 
 # ── Consequential Action Guard ──────────────────────────────────────────────
 
-def intercept_consequential_action(query: str) -> str | None:
-    """Detect high-risk operations and queue an approval item in the Approval Center."""
-    q = query.lower()
-    if any(k in q for k in ["scale", "restart database", "restart postgres", "firewall", "reboot server", "drop table", "truncate"]):
-        appr_id = f"appr-{len(_APPROVALS) + 101}"
-        new_appr = ApprovalItem(
-            id=appr_id,
-            action_type="infrastructure_modification",
-            title=f"Autonomous action requested: {query[:60]}...",
-            details=f"User prompted: '{query}'. Operations Agent intercepted this consequential operation to enforce enterprise safety boundaries.",
-            requested_by="Operations Agent (Autonomous Guard)",
-            risk_level="high",
-            status="pending",
-            timestamp="Just now",
-        )
-        _APPROVALS.insert(0, new_appr)
+_HIGH_RISK_MARKERS = (
+    "scale",
+    "restart database",
+    "restart postgres",
+    "firewall",
+    "reboot server",
+    "drop table",
+    "truncate",
+)
 
+
+def intercept_consequential_action(query: str, user_id: uuid.UUID | None = None) -> str | None:
+    """Block high-risk requests and optionally persist a real approval request.
+
+    No infrastructure action is executed. When a user id is available the
+    request is stored in ``approval_requests`` so it appears in the approval
+    center; otherwise the response states that nothing was executed and does
+    not claim an approval item exists.
+    """
+    q = query.lower()
+    if not any(k in q for k in _HIGH_RISK_MARKERS):
+        return None
+
+    approval_id: str | None = None
+    if user_id is not None:
+        db = SessionLocal()
+        try:
+            approval = ApprovalRequest(
+                owner_user_id=user_id,
+                action_type="infrastructure_modification",
+                title=f"Autonomous action requested: {query[:60]}",
+                details=(
+                    f"User prompted: '{query}'. The Operations Agent intercepted this "
+                    "consequential operation to enforce enterprise safety boundaries. "
+                    "No infrastructure action was executed."
+                ),
+                requested_by="Operations Agent (Autonomous Guard)",
+                risk_level="high",
+                status="pending",
+            )
+            db.add(approval)
+            db.commit()
+            db.refresh(approval)
+            approval_id = str(approval.id)
+        except Exception:
+            db.rollback()
+            approval_id = None
+        finally:
+            db.close()
+
+    if approval_id:
         return (
-            f"🛡️ **CONSEQUENTIAL ACTION GUARD INTERCEPTED**\n\n"
+            "🛡️ **CONSEQUENTIAL ACTION GUARD INTERCEPTED**\n\n"
             f"The Operations Agent detected a consequential infrastructure request: *\"{query}\"*.\n\n"
-            f"To prevent accidental downtime and comply with SOC-2/enterprise safety policy, this action cannot run automatically.\n\n"
-            f"📋 **Approval Item Generated:** `#{appr_id}`\n"
-            f"• **Risk Level:** `HIGH`\n"
-            f"• **Status:** `Pending Human Review`\n\n"
-            f"👉 Please open the **Approvals** tab in the sidebar to review and approve or reject this operation."
+            "To prevent accidental downtime and comply with SOC-2/enterprise safety policy, "
+            "this action cannot run automatically. No action was executed.\n\n"
+            f"📋 **Approval request created:** `#{approval_id}`\n"
+            "• **Risk Level:** `HIGH`\n"
+            "• **Status:** `Pending Human Review`\n\n"
+            "👉 Open the **Approvals** tab to review this request."
         )
-    return None
+
+    return (
+        "🛡️ **CONSEQUENTIAL ACTION GUARD INTERCEPTED**\n\n"
+        f"The Operations Agent detected a consequential infrastructure request: *\"{query}\"*.\n\n"
+        "This action cannot run automatically and **no action was executed**. "
+        "Use the controlled tool workflow to request it, which will require human approval."
+    )

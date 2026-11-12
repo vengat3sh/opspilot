@@ -127,3 +127,56 @@ npm run dev
 3. Implement frontend auth routing and pages (user/admin login/signup/verify/reset) + session-aware guards and dynamic current-user integration.
 4. Complete invitation acceptance UI flow, admin dashboard/user management UI, and secure token delivery/email integration.
 5. Implement OAuth (Google/GitHub), CSRF/rate limiting/MFA hardening, then run full acceptance tests and pgAdmin verification evidence.
+
+---
+
+## 13. Phase 2/3 update — persistent chat, projects, tools, operations
+
+**Status:** Implemented and locally verified. Production/Render verification still requires deployment logs and runtime access.
+
+### Persisted domains
+- `conversations`, `messages` — ordered, paginated, idempotent, soft-delete, rename/archive, edit branching, statuses (`streaming`, `completed`, `interrupted`, `failed`).
+- `projects`, `project_files` — user-owned repository registration and read-only indexing with `.gitignore`, secret/binary/excluded-directory, file-size and file-count limits.
+- `tool_operations` — controlled tool runs, risk levels, approval state, outputs and errors.
+- `knowledge_documents`, `tickets`, `approval_requests` — user-owned operational records added in migration `0003_ops_persistence`.
+- `audit_logs` — sensitive operations (chat completion/failure/interruption, document/ticket creation, approvals, tool execution).
+
+### Migrations
+- `0002_phase2_chat_projects`
+- `0003_ops_persistence`
+
+Both are additive with working `downgrade()` paths. `backend/scripts/verify_migrations.py` creates a disposable database, upgrades to head, downgrades through both revisions, and re-upgrades while asserting auth tables remain intact.
+
+### Verification commands and results (local Windows, PostgreSQL)
+```powershell
+cd D:\opspilot\backend
+$env:PYTHONPATH="D:\opspilot\backend"
+.\.venv\Scripts\python.exe -m pytest -q
+# 38 passed, 2 warnings
+
+.\.venv\Scripts\python.exe scripts\verify_migrations.py
+# MIGRATION VERIFICATION PASSED
+
+cd D:\opspilot\frontend
+npm run build
+# TypeScript + Vite production build succeeded (large chunk warning only)
+```
+
+### Local benchmark results (`backend/scripts/benchmark_phase2.py`)
+Measured on the local machine against local PostgreSQL. These are **not** production capacity claims.
+- Conversation create API: p50 11.58 ms, p95 12.73 ms
+- Message append API: p50 11.8 ms, p95 14.12 ms
+- 50-message page API: p50 8.93 ms, p95 10.08 ms
+- Conversation list API: p50 23.04 ms, p95 26.01 ms
+- SSE stream with deterministic fake provider: p50 32.54 ms, p95 38.39 ms
+- Repository indexing: 250 synthetic files in 585.7 ms (~426.8 files/s)
+
+### Honest limitations
+- **Live Render production verification** (deployment health, production DB migration state, cookies/CORS/SSE behavior) cannot be claimed without Render logs and runtime access.
+- **Docker sandbox execution** is unavailable unless `SANDBOX_ENABLED=true` and Docker is reachable; tools return `unavailable` with no host fallback.
+- **Git push, deployment, database read-only connections, attachments and multimodal input** are not connected; endpoints return empty lists, `503`, or an explicit unsupported response instead of simulated data.
+- `PROJECT_WORKSPACE_ROOT` must be configured before indexing; otherwise indexing returns `503`.
+- Chat cancellation is process-local (`_CANCEL_EVENTS`). Multi-worker deployments need a shared pub/sub cancellation channel.
+- Agent role definitions are fixed capability metadata. Execution counts and success rates shown in the UI are computed from the signed-in user's persisted messages/tool operations; research/analytics agents report zero until real invocations exist.
+- Cloud model cost is only reported as free-tier when the configured model ends in `:free`; other providers are labeled “Not tracked” rather than estimated.
+

@@ -3,6 +3,7 @@ import json
 import logging
 import re
 import time
+import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
@@ -12,9 +13,12 @@ import httpx
 from .config import Settings
 from .schemas import ChatMessage
 from . import rag
-from .routers.operations import _METRICS
 
 logger = logging.getLogger("opspilot.llm")
+
+# Process-local counters for lightweight diagnostics. Dashboard metrics come
+# from persisted database rows, not from these values.
+_METRICS = {"queries_count": 0, "total_latency_ms": 0, "total_tokens": 0}
 
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
 _THINK_OPEN_RE = re.compile(r"<think>", re.IGNORECASE)
@@ -269,21 +273,23 @@ class ChatPipelineResult:
         return self.result.completion_tokens
 
 
-def _prepare_messages(messages: list[ChatMessage]) -> list[ChatMessage]:
+def _prepare_messages(messages: list[ChatMessage], settings: Settings | None = None) -> list[ChatMessage]:
     """Trim history to reduce latency/token usage while preserving recent context."""
     if not messages:
         return messages
-    # Keep system messages (if any) + last 20 conversational turns, cap oversized content.
+    max_history = max(2, int(getattr(settings, "llm_max_history_messages", 20) or 20))
+    max_chars = max(500, int(getattr(settings, "llm_max_message_chars", 6000) or 6000))
+    # Keep system messages (if any) + recent conversational turns, cap oversized content.
     system = [m for m in messages if m.role == "system"][:1]
     convo = [m for m in messages if m.role != "system"]
-    convo = convo[-20:]
+    convo = convo[-max_history:]
     trimmed: list[ChatMessage] = []
     for m in system + convo:
         content = m.content or ""
-        if len(content) > 6000:
-            content = content[:6000] + "\n\n[...truncated for performance...]"
+        if len(content) > max_chars:
+            content = content[:max_chars] + "\n\n[...truncated for performance...]"
         trimmed.append(ChatMessage(role=m.role, content=content))
-    return trimmed or messages[-20:]
+    return trimmed or messages[-max_history:]
 
 
 def _is_simple_greeting(text: str) -> bool:
@@ -291,7 +297,14 @@ def _is_simple_greeting(text: str) -> bool:
     return len(t) <= 40 and t in {"hi", "hello", "hey", "yo", "thanks", "thank you", "ok", "okay", "cool", "test", "ping"}
 
 
-async def chat(settings: Settings, messages: list[ChatMessage], provider: str | None, agent: str | None = None):
+async def chat(
+    settings: Settings,
+    messages: list[ChatMessage],
+    provider: str | None,
+    agent: str | None = None,
+    extra_context: str | None = None,
+    user_id: uuid.UUID | None = None,
+):
     """
     Returns ChatPipelineResult for the app pipeline. Also compatible with legacy
     monkeypatches/tests that expect (settings, messages, provider) -> LLMResult.
@@ -299,10 +312,10 @@ async def chat(settings: Settings, messages: list[ChatMessage], provider: str | 
     chosen = provider or settings.llm_provider
     t0 = time.perf_counter()
     _METRICS["queries_count"] += 1
-    messages = _prepare_messages(messages)
+    messages = _prepare_messages(messages, settings)
     user_text = messages[-1].content if messages else ""
 
-    interception = rag.intercept_consequential_action(user_text)
+    interception = rag.intercept_consequential_action(user_text, user_id=user_id)
     if interception:
         latency = int((time.perf_counter() - t0) * 1000)
         return ChatPipelineResult(
@@ -316,8 +329,10 @@ async def chat(settings: Settings, messages: list[ChatMessage], provider: str | 
     if _is_simple_greeting(user_text):
         chunks, citations = [], []
     else:
-        chunks, citations = rag.search_knowledge(user_text)
+        chunks, citations = rag.search_knowledge(user_text, user_id=user_id)
     custom_prompt = rag.build_agent_system_prompt(active_agent, chunks)
+    if extra_context:
+        custom_prompt += "\n\n" + extra_context
     agent_display = f"{active_agent.capitalize()} Agent"
     t_prep = time.perf_counter()
     logger.info(
@@ -578,17 +593,19 @@ async def stream_chat(
     messages: list[ChatMessage],
     provider: str | None = None,
     agent: str | None = None,
+    extra_context: str | None = None,
+    user_id: uuid.UUID | None = None,
 ) -> AsyncIterator[str]:
     """Route streaming to the correct provider with enterprise RAG & safety guards."""
     chosen = provider or settings.llm_provider
     t0 = time.perf_counter()
     _METRICS["queries_count"] += 1
-    messages = _prepare_messages(messages)
+    messages = _prepare_messages(messages, settings)
     logger.info("stream_chat provider=%s messages=%d agent=%s", chosen, len(messages), agent)
 
     user_text = messages[-1].content if messages else ""
 
-    interception = rag.intercept_consequential_action(user_text)
+    interception = rag.intercept_consequential_action(user_text, user_id=user_id)
     if interception:
         yield interception
         yield json.dumps({
@@ -608,8 +625,10 @@ async def stream_chat(
     if _is_simple_greeting(user_text):
         chunks, citations = [], []
     else:
-        chunks, citations = rag.search_knowledge(user_text)
+        chunks, citations = rag.search_knowledge(user_text, user_id=user_id)
     custom_prompt = rag.build_agent_system_prompt(active_agent, chunks)
+    if extra_context:
+        custom_prompt += "\n\n" + extra_context
     agent_display = f"{active_agent.capitalize()} Agent"
     logger.info(
         "stream_chat prep agent=%s route_ms=%d rag_ms=%d citations=%d",

@@ -40,6 +40,103 @@ export interface StreamMeta {
   completion_tokens: number | null;
   agent?: string;
   citations?: string[];
+  conversation_id?: string;
+  assistant_message_id?: string;
+  user_message_id?: string;
+  status?: string;
+}
+
+export interface ConversationItem {
+  id: string;
+  user_id: string;
+  project_id?: string | null;
+  title: string;
+  description?: string | null;
+  conversation_type: string;
+  provider?: string | null;
+  model?: string | null;
+  status: string;
+  last_message_at?: string | null;
+  archived_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+  last_message_preview?: string | null;
+}
+
+export interface ConversationList {
+  items: ConversationItem[];
+  page: number;
+  page_size: number;
+  total: number;
+  has_more: boolean;
+}
+
+export interface MessageItem {
+  id: string;
+  conversation_id: string;
+  user_id: string;
+  role: "system" | "user" | "assistant" | "tool";
+  content: string;
+  message_type: string;
+  status: "pending" | "streaming" | "completed" | "interrupted" | "failed";
+  model?: string | null;
+  provider?: string | null;
+  token_usage?: Record<string, number | null> | null;
+  latency_ms?: number | null;
+  parent_message_id?: string | null;
+  error_message?: string | null;
+  sequence: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MessagePage {
+  items: MessageItem[];
+  has_more: boolean;
+  next_before_sequence?: number | null;
+}
+
+export interface ProjectFileItem {
+  path: string;
+  size_bytes: number;
+  language?: string | null;
+  indexed: boolean;
+  is_binary: boolean;
+  excerpt?: string | null;
+}
+
+export interface ProjectTreeItem {
+  path: string;
+  type: "file" | "directory";
+  size_bytes?: number | null;
+}
+
+export interface ProjectContext {
+  project_id: string;
+  project_name: string;
+  indexing_status: string;
+  repository_inspected: boolean;
+  files: ProjectFileItem[];
+  context: string;
+}
+
+export interface ToolOperation {
+  id: string;
+  user_id: string;
+  project_id?: string | null;
+  conversation_id?: string | null;
+  tool_name: string;
+  action: string;
+  risk_level: string;
+  status: string;
+  requires_approval: boolean;
+  input?: Record<string, unknown> | null;
+  output?: Record<string, unknown> | null;
+  error_message?: string | null;
+  created_at: string;
+  approved_at?: string | null;
+  executed_at?: string | null;
 }
 
 export interface DashboardMetrics {
@@ -116,6 +213,13 @@ export interface ProjectItem {
   environments: number;
   open_prs: number;
   pending_changes: number;
+  description?: string | null;
+  workspace_path?: string | null;
+  indexing_status?: string;
+  indexed_files?: number;
+  last_indexed_at?: string | null;
+  repository_inspected?: boolean;
+  repo_connected?: boolean;
 }
 
 export interface EnvironmentItem {
@@ -264,6 +368,96 @@ export async function getIncidents(projectId?: string): Promise<IncidentItem[]> 
   return data;
 }
 
+// ── Persistent conversations ───────────────────────────────────────────────
+
+export async function listConversations(params?: { q?: string; archived?: boolean; page?: number; limit?: number; projectId?: string }): Promise<ConversationList> {
+  const { data } = await http.get<ConversationList>("/api/conversations", {
+    params: { q: params?.q, archived: params?.archived ?? false, page: params?.page ?? 1, limit: params?.limit ?? 30, project_id: params?.projectId },
+  });
+  return data;
+}
+
+export async function createConversation(payload?: { title?: string; project_id?: string | null; provider?: Provider }): Promise<ConversationItem> {
+  const { data } = await http.post<ConversationItem>("/api/conversations", payload ?? {});
+  return data;
+}
+
+export async function getConversation(id: string): Promise<ConversationItem> {
+  const { data } = await http.get<ConversationItem>(`/api/conversations/${id}`);
+  return data;
+}
+
+export async function updateConversation(id: string, payload: { title?: string; archived?: boolean; project_id?: string | null }): Promise<ConversationItem> {
+  const { data } = await http.patch<ConversationItem>(`/api/conversations/${id}`, payload);
+  return data;
+}
+
+export async function deleteConversation(id: string): Promise<void> {
+  await http.delete(`/api/conversations/${id}`);
+}
+
+export async function getMessages(conversationId: string, params?: { limit?: number; beforeSequence?: number }): Promise<MessagePage> {
+  const { data } = await http.get<MessagePage>(`/api/conversations/${conversationId}/messages`, {
+    params: { limit: params?.limit ?? 50, before_sequence: params?.beforeSequence },
+  });
+  return data;
+}
+
+export async function editUserMessage(conversationId: string, messageId: string, content: string): Promise<MessageItem> {
+  const { data } = await http.patch<MessageItem>(`/api/conversations/${conversationId}/messages/${messageId}`, { content });
+  return data;
+}
+
+export async function retryAssistantMessage(assistantMessageId: string, provider?: Provider): Promise<ChatResponse> {
+  const { data } = await http.post<ChatResponse>(`/api/chat/retry/${assistantMessageId}`, null, { params: { provider } });
+  return data;
+}
+
+export async function cancelAssistantGeneration(assistantMessageId: string): Promise<void> {
+  await http.post(`/api/chat/cancel/${assistantMessageId}`);
+}
+
+// ── Projects / repository context ──────────────────────────────────────────
+
+export async function indexProject(projectId: string): Promise<{ project_id: string; indexing_status: string; indexed_files: number; skipped_files: number; message: string }> {
+  const { data } = await http.post(`/api/v1/projects/${projectId}/index`);
+  return data;
+}
+
+export async function getProjectContext(projectId: string, q = ""): Promise<ProjectContext> {
+  const { data } = await http.get<ProjectContext>(`/api/v1/projects/${projectId}/context`, { params: { q } });
+  return data;
+}
+
+export async function getProjectTree(projectId: string): Promise<ProjectTreeItem[]> {
+  const { data } = await http.get<ProjectTreeItem[]>(`/api/v1/projects/${projectId}/tree`);
+  return data;
+}
+
+export async function getProjectFiles(projectId: string, q?: string): Promise<ProjectFileItem[]> {
+  const { data } = await http.get<ProjectFileItem[]>(`/api/v1/projects/${projectId}/files`, { params: { q } });
+  return data;
+}
+
+// ── Controlled tools ───────────────────────────────────────────────────────
+
+export async function getToolOperations(params?: { conversationId?: string; projectId?: string }): Promise<ToolOperation[]> {
+  const { data } = await http.get<ToolOperation[]>("/api/tools/operations", {
+    params: { conversation_id: params?.conversationId, project_id: params?.projectId },
+  });
+  return data;
+}
+
+export async function executeTool(payload: { tool: string; project_id: string; conversation_id?: string | null; input?: Record<string, unknown> }): Promise<ToolOperation> {
+  const { data } = await http.post<ToolOperation>("/api/tools/execute", payload);
+  return data;
+}
+
+export async function approveToolOperation(operationId: string, action: "approve" | "reject", notes?: string): Promise<ToolOperation> {
+  const { data } = await http.post<ToolOperation>(`/api/tools/operations/${operationId}/approval`, { action, notes });
+  return data;
+}
+
 export interface AuthUser {
   id: string;
   full_name: string;
@@ -305,33 +499,75 @@ export async function authLogout(): Promise<void> {
   await http.post("/api/v1/auth/user/logout");
 }
 
+export interface StreamCallbacks {
+  onToken: (token: string) => void;
+  onDone: (meta: StreamMeta) => void;
+  onError: (msg: string, partial?: string) => void;
+  onStarted?: (meta: StreamMeta) => void;
+  onInterrupted?: (content: string, meta: StreamMeta) => void;
+  onUsage?: (usage: { prompt_tokens: number | null; completion_tokens: number | null }) => void;
+  onContext?: (meta: { project_id?: string | null; repository_inspected?: boolean }) => void;
+}
+
+export interface StreamRequest {
+  messages: ChatMessage[];
+  provider?: Provider;
+  agent?: string;
+  conversationId?: string | null;
+  projectId?: string | null;
+  idempotencyKey?: string;
+  regenerate?: boolean;
+}
+
+function streamMetaFrom(obj: Record<string, unknown>): StreamMeta {
+  return {
+    provider: String(obj.provider ?? ""),
+    model: String(obj.model ?? ""),
+    latency_ms: Number(obj.latency_ms ?? 0),
+    prompt_tokens: obj.prompt_tokens != null ? Number(obj.prompt_tokens) : null,
+    completion_tokens: obj.completion_tokens != null ? Number(obj.completion_tokens) : null,
+    agent: obj.agent ? String(obj.agent) : undefined,
+    citations: Array.isArray(obj.citations) ? (obj.citations as string[]) : undefined,
+    conversation_id: obj.conversation_id ? String(obj.conversation_id) : undefined,
+    assistant_message_id: obj.assistant_message_id ? String(obj.assistant_message_id) : undefined,
+    user_message_id: obj.user_message_id ? String(obj.user_message_id) : undefined,
+    status: obj.status ? String(obj.status) : undefined,
+  };
+}
+
 /**
- * Stream chat via SSE. Calls onToken for each text chunk, onDone with final
- * metadata, and onError on failure. Returns an AbortController so callers
- * can cancel mid-stream.
+ * Stream chat via the documented SSE protocol. Returns an AbortController so
+ * callers can stop generation. The backend persists partial output as
+ * interrupted when the client aborts.
  */
-export function streamChat(
-  messages: ChatMessage[],
-  provider: Provider | undefined,
-  agent: string | undefined,
-  onToken: (token: string) => void,
-  onDone: (meta: StreamMeta) => void,
-  onError: (msg: string) => void,
-): AbortController {
+export function streamChat(req: StreamRequest, cb: StreamCallbacks): AbortController {
   const controller = new AbortController();
   const url = `${baseURL}/api/chat/stream`;
 
   fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages, provider, agent }),
+    body: JSON.stringify({
+      messages: req.messages,
+      provider: req.provider,
+      agent: req.agent,
+      conversation_id: req.conversationId ?? null,
+      project_id: req.projectId ?? null,
+      idempotency_key: req.idempotencyKey,
+      regenerate: req.regenerate ?? false,
+    }),
     signal: controller.signal,
     credentials: "include",
   })
     .then(async (res) => {
       if (!res.ok || !res.body) {
         const text = await res.text().catch(() => "");
-        onError(`Backend error ${res.status}: ${text.slice(0, 200)}`);
+        let detail = text.slice(0, 300);
+        try {
+          const parsed = JSON.parse(text);
+          if (parsed && typeof parsed.detail === "string") detail = parsed.detail;
+        } catch {}
+        cb.onError(`Backend error ${res.status}: ${detail}`);
         return;
       }
       const reader = res.body.getReader();
@@ -344,43 +580,53 @@ export function streamChat(
         const frames = buf.split("\n\n");
         buf = frames.pop() ?? "";
         for (const frame of frames) {
+          let eventName = "";
+          const dataLines: string[] = [];
           for (const line of frame.split("\n")) {
-            if (!line.startsWith("data:")) continue;
-            const payload = line.slice(5).trim();
-            let parsed: unknown;
-            try {
-              parsed = JSON.parse(payload);
-            } catch {
-              continue;
-            }
-            if (typeof parsed === "object" && parsed !== null) {
-              const obj = parsed as Record<string, unknown>;
-              if (obj.__error__) {
-                onError(String(obj.__error__));
-                return;
-              }
-              if (obj.__done__) {
-                onDone({
-                  provider: String(obj.provider ?? ""),
-                  model: String(obj.model ?? ""),
-                  latency_ms: Number(obj.latency_ms ?? 0),
-                  prompt_tokens: obj.prompt_tokens != null ? Number(obj.prompt_tokens) : null,
-                  completion_tokens: obj.completion_tokens != null ? Number(obj.completion_tokens) : null,
-                  agent: obj.agent ? String(obj.agent) : undefined,
-                  citations: Array.isArray(obj.citations) ? (obj.citations as string[]) : undefined,
-                });
-                return;
-              }
-            } else if (typeof parsed === "string") {
-              onToken(parsed);
-            }
+            if (line.startsWith("event:")) eventName = line.slice(6).trim();
+            else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+          }
+          const payload = dataLines.join("\n");
+          if (!payload) continue;
+          let parsed: unknown;
+          try { parsed = JSON.parse(payload); } catch { parsed = payload; }
+          if (typeof parsed === "string") {
+            cb.onToken(parsed);
+            continue;
+          }
+          if (typeof parsed !== "object" || parsed === null) continue;
+          const obj = parsed as Record<string, unknown>;
+          const type = String(obj.type ?? eventName ?? "");
+          if (obj.__error__) { cb.onError(String(obj.__error__), String(obj.content ?? "")); return; }
+          if (obj.__done__) { cb.onDone(streamMetaFrom(obj)); return; }
+          if (type === "message_started") { cb.onStarted?.(streamMetaFrom(obj)); continue; }
+          if (type === "token") { cb.onToken(String(obj.content ?? "")); continue; }
+          if (type === "usage") {
+            cb.onUsage?.({
+              prompt_tokens: obj.prompt_tokens != null ? Number(obj.prompt_tokens) : null,
+              completion_tokens: obj.completion_tokens != null ? Number(obj.completion_tokens) : null,
+            });
+            continue;
+          }
+          if (type === "context") {
+            cb.onContext?.({ project_id: obj.project_id ? String(obj.project_id) : null, repository_inspected: Boolean(obj.repository_inspected) });
+            continue;
+          }
+          if (type === "message_completed") { cb.onDone(streamMetaFrom(obj)); return; }
+          if (type === "message_interrupted") {
+            cb.onInterrupted?.(String(obj.content ?? ""), streamMetaFrom(obj));
+            return;
+          }
+          if (type === "message_failed") {
+            cb.onError(String(obj.error ?? "Generation failed"), String(obj.content ?? ""));
+            return;
           }
         }
       }
     })
     .catch((err: unknown) => {
       if (err instanceof DOMException && err.name === "AbortError") return;
-      onError(err instanceof Error ? err.message : "Stream error");
+      cb.onError(err instanceof Error ? err.message : "Stream error");
     });
 
   return controller;
