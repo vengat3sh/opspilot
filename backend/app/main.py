@@ -1,8 +1,11 @@
 import logging
+import traceback
+import uuid
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
@@ -14,6 +17,7 @@ logging.basicConfig(
     level=settings.log_level.upper(),
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
+logger = logging.getLogger("opspilot")
 
 app = FastAPI(title="OpsPilot API", version="0.1.0")
 app.add_middleware(
@@ -26,8 +30,29 @@ app.add_middleware(
 
 
 @app.middleware("http")
-async def add_no_cache_to_html(request, call_next):
-    response = await call_next(request)
+async def request_context_and_errors(request: Request, call_next):
+    request_id = request.headers.get("x-request-id") or uuid.uuid4().hex
+    request.state.request_id = request_id
+    try:
+        response = await call_next(request)
+    except Exception:
+        # Log safely on server; never expose internal details/tokens/passwords to client
+        logger.exception(
+            "unhandled_exception request_id=%s method=%s path=%s error=%s",
+            request_id,
+            request.method,
+            request.url.path,
+            traceback.format_exc(limit=5).splitlines()[-1] if traceback.format_exc() else "unknown",
+        )
+        logger.error(
+            "unhandled_exception_trace request_id=%s method=%s path=%s\n%s",
+            request_id,
+            request.method,
+            request.url.path,
+            traceback.format_exc(),
+        )
+        response = JSONResponse(status_code=500, content={"detail": "Internal server error"})
+    response.headers["X-Request-ID"] = request_id
     content_type = response.headers.get("content-type", "")
     if "text/html" in content_type or request.url.path == "/":
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
