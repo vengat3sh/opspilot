@@ -1,9 +1,11 @@
 import httpx
+import uuid
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
 from app import llm
+from app.auth.deps import get_current_user
 from app.config import Settings, get_settings
 from app.main import app
 from app.schemas import ChatMessage
@@ -11,10 +13,36 @@ from app.schemas import ChatMessage
 client = TestClient(app)
 
 
+class _TestUser:
+    id = uuid.uuid4()
+    is_active = True
+    deleted_at = None
+
+
+def _auth_override():
+    return _TestUser()
+
+
+@pytest.fixture(autouse=True)
+def _auth_for_chat_tests(request):
+    # Keep existing unauthenticated behavior tests for non-chat endpoints.
+    if "chat" in request.node.name or "llm_status" in request.node.name:
+        app.dependency_overrides[get_current_user] = _auth_override
+        yield
+        app.dependency_overrides.pop(get_current_user, None)
+    else:
+        yield
+
+
 def test_health():
     r = client.get("/health")
     assert r.status_code == 200
     assert r.json()["status"] == "ok"
+
+
+def test_chat_requires_authentication():
+    app.dependency_overrides.pop(get_current_user, None)
+    assert client.post("/api/chat", json={"messages": [{"role": "user", "content": "hi"}]}).status_code == 401
 
 
 def test_chat_validation_rejects_empty_messages():

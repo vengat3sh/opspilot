@@ -6,15 +6,18 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from .. import llm
+from ..auth.deps import get_current_user
 from ..config import Settings, get_settings
+from ..db.models import User
 from ..schemas import ChatRequest, ChatResponse, LLMStatus
 
 router = APIRouter(prefix="/api", tags=["chat"])
 SettingsDep = Annotated[Settings, Depends(get_settings)]
+CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat(req: ChatRequest, settings: SettingsDep) -> ChatResponse:
+async def chat(req: ChatRequest, settings: SettingsDep, _user: CurrentUser) -> ChatResponse:
     try:
         try:
             out = llm.chat(settings, req.messages, req.provider, req.agent)
@@ -45,7 +48,7 @@ async def chat(req: ChatRequest, settings: SettingsDep) -> ChatResponse:
 
 
 @router.post("/chat/stream")
-async def chat_stream(req: ChatRequest, settings: SettingsDep) -> StreamingResponse:
+async def chat_stream(req: ChatRequest, settings: SettingsDep, _user: CurrentUser) -> StreamingResponse:
     """Server-Sent Events endpoint that streams tokens as they are generated."""
 
     async def event_generator():
@@ -77,7 +80,7 @@ async def chat_stream(req: ChatRequest, settings: SettingsDep) -> StreamingRespo
 
 
 @router.get("/llm/status", response_model=LLMStatus)
-async def llm_status(settings: SettingsDep) -> LLMStatus:
+async def llm_status(settings: SettingsDep, _user: CurrentUser) -> LLMStatus:
     reachable, models = await llm.ollama_status(settings)
     cloud_ok = bool(settings.cloud_api_key.get_secret_value())
     # If Ollama is down but cloud is configured (or on cloud deployment), report cloud
