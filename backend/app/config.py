@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     github_client_secret: SecretStr = SecretStr("")
     github_redirect_uri: str = "http://localhost:5173/auth/github/callback"
 
+    # Diagnostics (optional, non-public; set to enable protected diagnostics endpoint)
+    diagnostics_token: SecretStr = SecretStr("")
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

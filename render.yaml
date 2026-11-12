@@ -44,4 +44,6 @@ services:
         sync: false
       - key: BOOTSTRAP_SUPER_ADMIN_NAME
         sync: false
+      - key: DIAGNOSTICS_TOKEN
+        sync: false
 

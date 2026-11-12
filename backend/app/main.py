@@ -101,6 +101,90 @@ async def health():
     }
 
 
+@app.get("/api/v1/diagnostics/auth")
+async def auth_diagnostics(request: Request):
+    """Protected, non-sensitive auth subsystem diagnostics. Requires X-Diagnostics-Token matching OPS/DIAGNOSTICS_TOKEN env."""
+    token = (get_settings().diagnostics_token.get_secret_value() or "").strip()
+    provided = (request.headers.get("x-diagnostics-token") or "").strip()
+    if not token or provided != token:
+        # Do not reveal whether diagnostics are enabled
+        return JSONResponse(status_code=404, content={"detail": "Not Found"})
+
+    checks = {}
+    try:
+        from sqlalchemy.orm import configure_mappers
+        from sqlalchemy import text, select
+        from .db.session import engine, SessionLocal
+        from .db import models  # noqa: F401
+        from .auth import security, service
+
+        try:
+            configure_mappers()
+            checks["mappers"] = {"ok": True}
+        except Exception as exc:
+            checks["mappers"] = {"ok": False, "error": type(exc).__name__}
+
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            checks["db_connect"] = {"ok": True}
+        except Exception as exc:
+            checks["db_connect"] = {"ok": False, "error": type(exc).__name__}
+
+        try:
+            with engine.connect() as conn:
+                row = conn.execute(text("SELECT version_num FROM alembic_version LIMIT 1")).fetchone()
+                checks["alembic_version"] = {"ok": row is not None, "version": row[0] if row else None}
+        except Exception as exc:
+            checks["alembic_version"] = {"ok": False, "error": type(exc).__name__}
+
+        db = SessionLocal()
+        try:
+            try:
+                db.execute(select(models.Role).limit(1)).all()
+                roles = db.execute(select(models.Role.name)).scalars().all()
+                checks["role_query"] = {"ok": True, "roles": sorted(set(roles))}
+            except Exception as exc:
+                checks["role_query"] = {"ok": False, "error": type(exc).__name__}
+
+            try:
+                db.execute(select(models.User).limit(1)).all()
+                checks["user_query"] = {"ok": True}
+            except Exception as exc:
+                checks["user_query"] = {"ok": False, "error": type(exc).__name__}
+
+            try:
+                # Transaction test with rollback (no persistent writes)
+                db.execute(text("SELECT 1"))
+                db.rollback()
+                checks["db_transaction"] = {"ok": True}
+            except Exception as exc:
+                db.rollback()
+                checks["db_transaction"] = {"ok": False, "error": type(exc).__name__}
+        finally:
+            db.close()
+
+        try:
+            hashed = security.hash_password("DiagPass123!")
+            checks["password_hash_verify"] = {"ok": security.verify_password("DiagPass123!", hashed)}
+        except Exception as exc:
+            checks["password_hash_verify"] = {"ok": False, "error": type(exc).__name__}
+
+        try:
+            tok = security.create_access_token("00000000-0000-0000-0000-000000000000", {"roles": []})
+            decoded = security.decode_token(tok) or {}
+            checks["jwt_roundtrip"] = {"ok": decoded.get("type") == "access" and decoded.get("sub") is not None}
+        except Exception as exc:
+            checks["jwt_roundtrip"] = {"ok": False, "error": type(exc).__name__}
+
+    except Exception as exc:
+        logger.exception("diagnostics_internal_error")
+        return JSONResponse(status_code=500, content={"detail": "Diagnostics error", "error": type(exc).__name__})
+
+    ok = all(v.get("ok") for v in checks.values() if isinstance(v, dict))
+    return {"status": "ok" if ok else "degraded", "checks": checks}
+
+
 # Production deployment: Mount frontend dist (works in Docker container & local dev)
 possible_dists = [
     Path(__file__).resolve().parent.parent / "frontend" / "dist",
