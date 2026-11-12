@@ -273,7 +273,7 @@ export default function App() {
             <button className="nav-icon-btn" onClick={() => setSidebarOpen(false)} type="button" title="Close navigation">✕</button>
             <span className="nav-active-pill">{titleMap[activeTab] || "OpsPilot"}</span>
           </div>
-          <TopNav search={search} setSearch={setSearch} onOpenCmdk={() => setCmdkOpen(true)} notifCount={notifCount} onNotif={() => { setNotifOpen(v => !v); setProfileOpen(false); }} onProfile={() => { setProfileOpen(v => !v); setNotifOpen(false); }} profileOpen={profileOpen} />
+          <TopNav search={search} setSearch={setSearch} onOpenCmdk={() => setCmdkOpen(true)} notifCount={notifCount} onNotif={() => { setNotifOpen(v => !v); setProfileOpen(false); }} onProfile={() => { setProfileOpen(v => !v); setNotifOpen(false); }} profileOpen={profileOpen} userName="User" />
         </header>
 
         {notifOpen && (
@@ -292,6 +292,7 @@ export default function App() {
             onConnectRepo={() => setActiveTab("connect")}
             onOpenEngineer={() => setActiveTab("engineer")}
             onSelectProject={(p) => { setSelectedProject(p); setActiveTab("projects"); }}
+            userName="User"
           />
         )}
         {activeTab === "engineer" && (

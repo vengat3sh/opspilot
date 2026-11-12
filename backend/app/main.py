@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
 from .routers import chat, operations, projects
+from .auth.router import admin_router, router as auth_router
 
 settings = get_settings()
 logging.basicConfig(
@@ -18,6 +19,7 @@ app = FastAPI(title="OpsPilot API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -37,6 +39,8 @@ async def add_no_cache_to_html(request, call_next):
 app.include_router(chat.router)
 app.include_router(operations.router)
 app.include_router(projects.router)
+app.include_router(auth_router)
+app.include_router(admin_router)
 
 
 @app.get("/health")

@@ -29,9 +29,42 @@ class Settings(BaseSettings):
         "If a question is ambiguous, state your assumption before answering."
     )
 
+    # Database
+    database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/opspilot_db"
+    db_pool_size: int = 10
+    db_max_overflow: int = 20
+
+    # Auth / Security
+    jwt_secret_key: SecretStr = SecretStr("change-this-to-a-long-random-secret")
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 15
+    refresh_token_expire_days: int = 30
+    session_cookie_name: str = "opspilot_session"
+    cookie_secure: bool = False
+    cookie_samesite: Literal["lax", "strict", "none"] = "lax"
+    app_env: str = "development"
+    frontend_base_url: str = "http://localhost:5173"
+
+    # Bootstrap Super Admin
+    bootstrap_super_admin_email: str = ""
+    bootstrap_super_admin_password: SecretStr = SecretStr("")
+    bootstrap_super_admin_name: str = "OpsPilot Super Admin"
+
+    # OAuth
+    google_client_id: str = ""
+    google_client_secret: SecretStr = SecretStr("")
+    google_redirect_uri: str = "http://localhost:5173/auth/google/callback"
+    github_client_id: str = ""
+    github_client_secret: SecretStr = SecretStr("")
+    github_redirect_uri: str = "http://localhost:5173/auth/github/callback"
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def is_production(self) -> bool:
+        return self.app_env.lower() == "production"
 
 
 @lru_cache

@@ -62,10 +62,11 @@ export function CommandPalette({ open, onClose, onNavigate }: { open: boolean; o
 }
 
 export function TopNav({
-  search, setSearch, onOpenCmdk, notifCount, onNotif, onProfile, profileOpen,
+  search, setSearch, onOpenCmdk, notifCount, onNotif, onProfile, profileOpen, userName = "User",
 }: {
-  search: string; setSearch: (v: string) => void; onOpenCmdk: () => void; notifCount: number; onNotif: () => void; onProfile: () => void; profileOpen: boolean;
+  search: string; setSearch: (v: string) => void; onOpenCmdk: () => void; notifCount: number; onNotif: () => void; onProfile: () => void; profileOpen: boolean; userName?: string;
 }) {
+  const initial = (userName.trim()[0] || "U").toUpperCase();
   return (
     <div className="dcc-topnav">
       <div className="dcc-search-wrap">
@@ -75,7 +76,7 @@ export function TopNav({
       <div className="dcc-top-actions">
         <button className="dcc-icon-btn" onClick={onNotif} type="button" title="Notifications">🔔 {notifCount > 0 && <span className="dcc-notif-dot">{notifCount}</span>}</button>
         <div style={{ position: "relative" }}>
-          <button className="dcc-user-btn" onClick={onProfile} type="button"><span className="dcc-avatar">V</span><span>Vengatesh</span></button>
+          <button className="dcc-user-btn" onClick={onProfile} type="button"><span className="dcc-avatar">{initial}</span><span>{userName}</span></button>
           {profileOpen && (
             <div className="dcc-menu">
               <button type="button">Profile</button>
@@ -90,9 +91,9 @@ export function TopNav({
 }
 
 export default function DeveloperCommandCenter({
-  tab, onSelectProject, onOpenEngineer, onConnectRepo, searchQuery,
+  tab, onSelectProject, onOpenEngineer, onConnectRepo, searchQuery, userName = "User",
 }: {
-  tab: Tab; onSelectProject: (p: ProjectItem) => void; onOpenEngineer: () => void; onConnectRepo: () => void; searchQuery: string;
+  tab: Tab; onSelectProject: (p: ProjectItem) => void; onOpenEngineer: () => void; onConnectRepo: () => void; searchQuery: string; userName?: string;
 }) {
   const projectsQ = useQuery({ queryKey: ["projects"], queryFn: getProjects, staleTime: 30_000 });
   const metricsQ = useQuery({ queryKey: ["dashboard-metrics"], queryFn: getDashboardMetrics, staleTime: 15_000 });
@@ -312,7 +313,7 @@ export default function DeveloperCommandCenter({
       <div className="dcc-banner">
         <div>
           <div className="dcc-banner-kicker">OpsPilot 3.0 • Developer Command Center</div>
-          <h1>Welcome back, Vengatesh</h1>
+          <h1>Welcome back{userName && userName !== "User" ? `, ${userName}` : ""}</h1>
           <p>Connect repositories, run AI engineering tasks, manage deployments, and monitor incidents from one secure control plane.</p>
           <div className="dcc-banner-actions">
             <button className="dcc-btn primary" onClick={onConnectRepo}>Connect Repository</button>
